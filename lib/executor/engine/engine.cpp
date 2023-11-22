@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstring>
 #include <signal.h>
+#include <time.h>
 
 namespace WasmEdge {
 namespace Executor {
@@ -62,29 +63,34 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
     }
   }
 
+  clock_t start, end;
   if (Res) {
+    start = clock();
     Migr.preDumpIter(Func.getModule());
+    end = clock();
+    std::cerr << "preDumpIter: " << static_cast<double>(end - start) / CLOCKS_PER_SEC * 1000.0 << "[ms]" << "\n";
 
     // Restore
     if (RestoreFlag && Conf.getStatisticsConfigure().getRestoreFlag()) {
+      start = clock();
+
       std::cout << "### Restore! ###" << std::endl;
       auto Res = Migr.restoreIter(Func.getModule());
       if (!Res) {
         return Unexpect(Res);
       }
       StartIt = Res.value();
-      std::cout << "Success to restore iter" << std::endl;
-
       StackMgr = Migr.restoreStackMgr().value();
-      std::cout << "Success to restore stack" << std::endl;
-      
+
+      RestoreFlag = false;
       /// restoreしたものが元のものと一致するかtest
       Migr.dumpIter(StartIt, "restored_");
       Migr.dumpStackMgrFrame(StackMgr, "restored_");
       Migr.dumpStackMgrValue(StackMgr, "restored_");
       std::cout << "Success to dump restore file" << std::endl;
 
-      RestoreFlag = false;
+      end = clock();
+      std::cerr << "restore: " << static_cast<double>(end - start) / CLOCKS_PER_SEC * 1000.0 << "[ms]" << "\n";
     }
   
     // If not terminated, execute the instructions in interpreter mode.
@@ -1867,7 +1873,8 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
 
   int cnt = 0;
   int dispatch_count = 0;
-  int dispatch_limit = -1;
+  int dispatch_limit = -1; 
+  clock_t start, end;
 
   while (PC != PCEnd) {
     dispatch_count++;
@@ -1911,25 +1918,23 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
     if (DumpFlag) {
       if (Conf.getStatisticsConfigure().getDumpFlag()) {
         // For WAMR
+        start = clock();
+
         Migr.dumpMemory(StackMgr.getModule());
-        std::cout << "Success dumpMemory for WAMR" << std::endl;
         Migr.dumpGlobal(StackMgr.getModule());
-        std::cout << "Success dumpGlobal for WAMR" << std::endl;
         Migr.dumpStack(StackMgr);
-        std::cout << "Success dumpStack for WAMR" << std::endl;
 
         StackMgr.pushFrame(StackMgr.getModule(), PC, 0, 0, false);
         Migr.dumpFrame(StackMgr);
-        std::cout << "Success dumpFrame for WAMR" << std::endl;
         StackMgr.popFrame();
 
         // For WasmEdge
         Migr.dumpIter(PC);
-        std::cout << "Success dumpIter" << std::endl;
         Migr.dumpStackMgrFrame(StackMgr);
-        std::cout << "Success dumpStackMgrFrame" << std::endl;
         Migr.dumpStackMgrValue(StackMgr);
-        std::cout << "Success dumpStackMgrValue" << std::endl;
+
+        end = clock();
+        std::cerr << "snapshot: " << static_cast<double>(end - start) / CLOCKS_PER_SEC * 1000.0 << "[ms]" << "\n";
       }
       return {};
     }
