@@ -53,6 +53,8 @@ option(WASMEDGE_BUILD_AOT_RUNTIME "Enable WasmEdge LLVM-based ahead of time comp
 option(WASMEDGE_BUILD_SHARED_LIB "Generate the WasmEdge shared library." ON)
 option(WASMEDGE_BUILD_STATIC_LIB "Generate the WasmEdge static library." OFF)
 option(WASMEDGE_BUILD_TOOLS "Generate wasmedge and wasmedgec tools. Depend on and will build the WasmEdge shared library." ON)
+option(WASMEDGE_PROFILING_GPERF "Link gperftools to binary" OFF)
+option(WASMEDGE_PROFILING_GPROF "Link gperftools to binary" OFF)
 option(WASMEDGE_BUILD_FUZZING "Generate fuzzing test tools. Couldn't build with wasmedge tools and unit tests." OFF)
 option(WASMEDGE_BUILD_PLUGINS "Generate plugins." ON)
 option(WASMEDGE_BUILD_EXAMPLE "Generate examples." OFF)
@@ -69,6 +71,40 @@ option(WASMEDGE_PLUGIN_PROCESS "Enable WasmEdge process plugin." OFF)
 option(WASMEDGE_PLUGIN_IMAGE "Enable WasmEdge image plugin." OFF)
 option(WASMEDGE_PLUGIN_TENSORFLOW "Enable WasmEdge TensorFlow plugin." OFF)
 option(WASMEDGE_PLUGIN_TENSORFLOWLITE "Enable WasmEdge TensorFlow-Lite plugin." OFF)
+
+
+if(WASMEDGE_PROFILING_GPERF)
+  # set(GPERF_PATH "/tmp/gperftools-2.13/cmake/")
+  if(GPERF_PATH)
+    link_directories(${GPERF_PATH})
+  else()
+    message(STATUS "Gperf path not given, running ${CMAKE_SOURCE_DIR}/utils/profiling.sh")
+    link_directories("/usr/local/lib")
+  endif()
+
+  # link_libraries("profiler")
+  # target_link_libraries(YourTargetName PRIVATE -Wl,-no-as-needed gperftools -Wl,--as-needed)
+  link_libraries(-Wl,-no-as-needed profiler -Wl,--as-needed)
+  
+  add_custom_target(profile 
+    COMMAND env CPUPROFILE=${CMAKE_BINARY_DIR}/wasmedge.prof 
+    ${CMAKE_BINARY_DIR}/tools/wasmedge/wasmedge n-body.wasm 1000
+    COMMENT "Profiling"
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    DEPENDS wasmedge
+  )
+  add_dependencies(profile wasmedge)
+  add_custom_target(prof-visualize-text 
+    COMMAND pprof --text ${CMAKE_BINARY_DIR}/tools/wasmedge/wasmedge ${CMAKE_BINARY_DIR}/wasmedge.prof
+    COMMENT "Visualize in text"
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+  )
+  add_custom_target(prof-visualize-gv 
+    COMMAND pprof --gv ${CMAKE_BINARY_DIR}/tools/wasmedge/wasmedge ${CMAKE_BINARY_DIR}/wasmedge.prof
+    COMMENT "Visualize in gv"
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+  )
+endif()
 
 if(WASMEDGE_BUILD_TOOLS AND WASMEDGE_BUILD_FUZZING)
   message(FATAL_ERROR "wasmedge tool and fuzzing tool are exclusive options.")

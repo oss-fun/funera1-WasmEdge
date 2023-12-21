@@ -43,6 +43,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
 
   // Push arguments.
   for (auto &Val : Params) {
+    std::cout << "[DEBUG]runFunction Params: " << Val.get<uint128_t>() << std::endl;
     StackMgr.push(Val);
   }
 
@@ -62,26 +63,24 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
   }
 
   if (Res) {
-    Migr.preDumpIter(Func.getModule());
+    if (Conf.getStatisticsConfigure().getDumpFlag() || Conf.getStatisticsConfigure().getRestoreFlag()) {
+      Migr.preDumpIter(Func.getModule());
+    }
 
     // Restore
     if (RestoreFlag && Conf.getStatisticsConfigure().getRestoreFlag()) {
-      std::cout << "### Restore! ###" << std::endl;
-      auto Res = Migr.restoreIter(Func.getModule());
+      auto Res = Migr.restoreProgramCounter(Func.getModule());
       if (!Res) {
         return Unexpect(Res);
       }
       StartIt = Res.value();
-      std::cout << "Success to restore iter" << std::endl;
-
-      StackMgr = Migr.restoreStackMgr().value();
-      std::cout << "Success to restore stack" << std::endl;
-      
-      /// restoreしたものが元のものと一致するかtest
-      Migr.dumpIter(StartIt, "restored_");
-      Migr.dumpStackMgrFrame(StackMgr, "restored_");
-      Migr.dumpStackMgrValue(StackMgr, "restored_");
-      std::cout << "Success to dump restore file" << std::endl;
+      std::cerr << "Restore pc" << std::endl;
+      Migr.restoreStack(StackMgr);
+      std::cerr << "Restore stack" << std::endl;
+      Migr.restoreMemory(StackMgr.getModule());
+      std::cerr << "Restore memory" << std::endl;
+      Migr.restoreGlobal(StackMgr.getModule());
+      std::cerr << "Restore global" << std::endl;
 
       RestoreFlag = false;
     }
@@ -203,24 +202,31 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
     case OpCode::Select_t: {
       // Pop the i32 value and select values from stack.
       ValVariant CondVal = StackMgr.pop();
+      const uint8_t &T2 = StackMgr.getTypeTop();
       ValVariant Val2 = StackMgr.pop();
+      const uint8_t &T1 = StackMgr.getTypeTop();
       ValVariant Val1 = StackMgr.pop();
 
       // Select the value.
       if (CondVal.get<uint32_t>() == 0) {
         StackMgr.push(Val2);
+        StackMgr.getTypeTop() = T2;
       } else {
         StackMgr.push(Val1);
+        StackMgr.getTypeTop() = T1;
       }
       return {};
     }
 
     // Variable Instructions
     case OpCode::Local__get:
+      // std::cout << "[DEBUG]local.get " << Instr.getTargetIndex() << std::endl;
       return runLocalGetOp(StackMgr, Instr.getStackOffset());
     case OpCode::Local__set:
+      // std::cout << "[DEBUG]local.get " << Instr.getTargetIndex() << std::endl;
       return runLocalSetOp(StackMgr, Instr.getStackOffset());
     case OpCode::Local__tee:
+      // std::cout << "[DEBUG]local.get " << Instr.getTargetIndex() << std::endl;
       return runLocalTeeOp(StackMgr, Instr.getStackOffset());
     case OpCode::Global__get:
       return runGlobalGetOp(StackMgr, Instr.getTargetIndex());
@@ -346,10 +352,12 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
 
     // Const numeric instructions
     case OpCode::I32__const:
-    case OpCode::I64__const:
     case OpCode::F32__const:
+      StackMgr.push<uint32_t>(Instr.getNum().get<uint32_t>());
+      return {};
+    case OpCode::I64__const:
     case OpCode::F64__const:
-      StackMgr.push(Instr.getNum());
+      StackMgr.push<uint64_t>(Instr.getNum().get<uint64_t>());
       return {};
 
     // Unary numeric instructions
@@ -1853,9 +1861,14 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
   // signal handler
   signal(SIGINT, &signalHandler);
 
-  int cnt = 0;
+  // int dispatch_count = 0;
+  // int dispatch_limit = 1000;
 
   while (PC != PCEnd) {
+    // dispatch_count++;
+    // if (dispatch_count == dispatch_limit) DumpFlag = true;
+      
+
     if (Stat) {
       OpCode Code = PC->getOpCode();
       if (Conf.getStatisticsConfigure().isInstructionCounting()) {
@@ -1871,37 +1884,46 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
         }
       }
       
-      if (isInteractiveMode && Conf.getStatisticsConfigure().getDebugMode()) {
-        // DebugMode
-        // PCのsource locationとbreakで与えられたsource locationが一致するか判定し、一致する場合、isInteractiveMode = trueにする
-        // source locationはとりあえず(func_idx, offset)とする
-        SourceLoc PCSourceLoc = Migr.getSourceLoc(PC);
-        std::cout << "PC is " << PCSourceLoc.FuncIdx << " " << PCSourceLoc.Offset << std::endl;
-        if (PCSourceLoc == breakpoint) {
-          isInteractiveMode = true;
-        }
+      // if (isInteractiveMode && Conf.getStatisticsConfigure().getDebugMode()) {
+      //   // DebugMode
+      //   // PCのsource locationとbreakで与えられたsource locationが一致するか判定し、一致する場合、isInteractiveMode = trueにする
+      //   // source locationはとりあえず(func_idx, offset)とする
+      //   SourceLoc PCSourceLoc = Migr.getSourceLoc(PC);
+      //   std::cout << "PC is " << PCSourceLoc.FuncIdx << " " << PCSourceLoc.Offset << std::endl;
+      //   if (PCSourceLoc == breakpoint) {
+      //     isInteractiveMode = true;
+      //   }
         
-        if (isInteractiveMode) {
-          OpCode Code = PC->getOpCode();
-          std::cout << "Code is " << std::hex << static_cast<int>(Code) << std::noshowbase << std::endl;
-          InteractiveMode(breakpoint, PCSourceLoc, StackMgr);
-          isInteractiveMode = false;
-        }
-      }
+      //   if (isInteractiveMode) {
+      //     OpCode Code = PC->getOpCode();
+      //     std::cout << "Code is " << std::hex << static_cast<int>(Code) << std::noshowbase << std::endl;
+      //     InteractiveMode(breakpoint, PCSourceLoc, StackMgr);
+      //     isInteractiveMode = false;
+      //   }
+      // }
     }
 
     if (DumpFlag) {
-      Migr.dumpIter(PC);
-      std::cout << "Success dumpIter" << std::endl;
-      Migr.dumpStackMgrFrame(StackMgr);
-      std::cout << "Success dumpStackMgrFrame" << std::endl;
-      Migr.dumpStackMgrValue(StackMgr);
-      std::cout << "Success dumpStackMgrValue" << std::endl;
-      // TODO: 途中で止まったことがわかるエラーを返す
+      if (Conf.getStatisticsConfigure().getDumpFlag()) {
+        // For WasmEdge
+        Migr.dumpMemory(StackMgr.getModule());
+        std::cerr << "Success dumpMemory" << std::endl;
+        Migr.dumpGlobal(StackMgr.getModule());
+        std::cerr << "Success dumpGlobal" << std::endl;
+        Migr.dumpProgramCounter(StackMgr.getModule(), PC);
+        std::cerr << "Success dumpIter" << std::endl;
+
+        StackMgr.pushFrame(StackMgr.getModule(), PC, 0, 0, false);
+        Migr.dumpStack(StackMgr);
+        StackMgr.popFrame();
+        std::cerr << "Success dumpStack" << std::endl;
+      }
       return {};
     }
 
      
+    // OpCode Code = PC->getOpCode();
+    // std::cout << "[DEBUG]OpCode: 0x" << std::hex << (uint16_t)Code << std::dec << std::endl;
     if (auto Res = Dispatch(); !Res) {
       SourceLoc PCSourceLoc = Migr.getSourceLoc(PC);
       std::cout << "[WASMEDGE ERROR] PC is " << PCSourceLoc.FuncIdx << " " << PCSourceLoc.Offset << std::endl;
@@ -1910,7 +1932,6 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
     }
     
     PC++;
-    cnt++;
   }
   return {};
 }

@@ -26,11 +26,12 @@ class StackManager {
 public:
   struct Frame {
     Frame() = delete;
-    Frame(const Instance::ModuleInstance *Mod, AST::InstrView::iterator FromIt,
+    Frame(const Instance::ModuleInstance *Mod, AST::InstrView::iterator FromIt, const Instance::FunctionInstance *Func,
           uint32_t L, uint32_t A, uint32_t V) noexcept
-        : Module(Mod), From(FromIt), Locals(L), Arity(A), VPos(V) {}
+        : Module(Mod), From(FromIt), EnterFunc(Func), Locals(L), Arity(A), VPos(V) {}
     const Instance::ModuleInstance *Module;
     AST::InstrView::iterator From;
+    const Instance::FunctionInstance *EnterFunc;
     uint32_t Locals;
     uint32_t Arity;
     uint32_t VPos;
@@ -43,6 +44,7 @@ public:
   /// unexpect operations will occur.
   StackManager() noexcept {
     ValueStack.reserve(2048U);
+    TypeStack.reserve(2048U);
     FrameStack.reserve(16U);
   }
   ~StackManager() = default;
@@ -58,7 +60,16 @@ public:
     assuming(0 < Offset && Offset <= ValueStack.size());
     return ValueStack[ValueStack.size() - Offset];
   }
+  
+  uint8_t &getTypeTopN(uint32_t Offset) noexcept {
+    assuming(0 < Offset && Offset <= TypeStack.size());
+    return TypeStack[TypeStack.size() - Offset];
+  }
 
+  uint8_t &getTypeTop() noexcept {
+    return TypeStack.back();
+  }
+  
   /// Unsafe Getter of top N value entries of stack.
   Span<Value> getTopSpan(uint32_t N) {
     return Span<Value>(ValueStack.end() - N, N);
@@ -67,21 +78,30 @@ public:
   /// Push a new value entry to stack.
   template <typename T> void push(T &&Val) {
     ValueStack.push_back(std::forward<T>(Val));
+    // 32bitなら0, 64bitなら1
+    size_t t = sizeof(T);
+    TypeStack.push_back(std::forward<uint8_t>(t/4));
+    // std::cout << "[DEBUG]push stack: type kind: " << +TypeStack.back() << ", Pos: " << ValueStack.size() << " " << TypeStack.size() << std::endl;
+  }
+
+  template <typename T, typename U> void push(T &&Val, U &&Typ) {
+    ValueStack.push_back(std::forward<T>(Val));
+    TypeStack.push_back(std::forward<U>(Typ));
   }
 
   /// Unsafe Pop and return the top entry.
   Value pop() {
     Value V = std::move(ValueStack.back());
     ValueStack.pop_back();
+    TypeStack.pop_back();
     return V;
   }
 
-  /// Push a new frame entry to stack.
-  void pushFrame(const Instance::ModuleInstance *Module,
-                 AST::InstrView::iterator From, uint32_t LocalNum = 0,
-                 uint32_t Arity = 0, bool IsTailCall = false) noexcept {
+  void _pushFrame(const Instance::ModuleInstance *Module,
+                 AST::InstrView::iterator From, const Runtime::Instance::FunctionInstance *EnterFunc, 
+                 uint32_t LocalNum, uint32_t Arity, uint32_t VPos, bool IsTailCall) noexcept {
     if (likely(!IsTailCall)) {
-      FrameStack.emplace_back(Module, From, LocalNum, Arity, ValueStack.size());
+      FrameStack.emplace_back(Module, From, EnterFunc, LocalNum, Arity, VPos);
     } else {
       assuming(!FrameStack.empty());
       assuming(FrameStack.back().VPos >= FrameStack.back().Locals);
@@ -90,11 +110,30 @@ public:
       ValueStack.erase(ValueStack.begin() + FrameStack.back().VPos -
                            FrameStack.back().Locals,
                        ValueStack.end() - LocalNum);
+      TypeStack.erase(TypeStack.begin() + FrameStack.back().VPos -
+                           FrameStack.back().Locals,
+                       TypeStack.end() - LocalNum);
+
       FrameStack.back().Module = Module;
       FrameStack.back().Locals = LocalNum;
+      FrameStack.back().EnterFunc = EnterFunc;
       FrameStack.back().Arity = Arity;
-      FrameStack.back().VPos = static_cast<uint32_t>(ValueStack.size());
+      FrameStack.back().VPos = VPos;
     }
+  }
+  
+  /// Push a new frame entry to stack.
+  void pushFrame(const Instance::ModuleInstance *Module,
+                 AST::InstrView::iterator From, uint32_t LocalNum = 0,
+                 uint32_t Arity = 0, bool IsTailCall = false) noexcept {
+
+    _pushFrame(Module, From, nullptr, LocalNum, Arity, ValueStack.size(), IsTailCall);
+  }
+
+  void pushFrameExt(const Instance::ModuleInstance *Module,
+                 AST::InstrView::iterator From, const Runtime::Instance::FunctionInstance *EnterFunc, 
+                 uint32_t LocalNum = 0, uint32_t Arity = 0, bool IsTailCall = false) noexcept {
+    _pushFrame(Module, From, EnterFunc, LocalNum, Arity, ValueStack.size(), IsTailCall);
   }
 
   /// Unsafe pop top frame.
@@ -106,6 +145,9 @@ public:
     ValueStack.erase(ValueStack.begin() + FrameStack.back().VPos -
                          FrameStack.back().Locals,
                      ValueStack.end() - FrameStack.back().Arity);
+    TypeStack.erase(TypeStack.begin() + FrameStack.back().VPos - 
+                        FrameStack.back().Locals,
+                     TypeStack.end() - FrameStack.back().Arity);
     auto From = FrameStack.back().From;
     FrameStack.pop_back();
     return From;
@@ -114,8 +156,11 @@ public:
   /// Unsafe erase stack.
   void stackErase(uint32_t EraseBegin, uint32_t EraseEnd) noexcept {
     assuming(EraseEnd <= EraseBegin && EraseBegin <= ValueStack.size());
+    assuming(EraseEnd <= EraseBegin && EraseBegin <= TypeStack.size());
     ValueStack.erase(ValueStack.end() - EraseBegin,
                      ValueStack.end() - EraseEnd);
+    TypeStack.erase(TypeStack.end() - EraseBegin,
+                     TypeStack.end() - EraseEnd);
   }
 
   /// Unsafe leave top label.
@@ -146,18 +191,15 @@ public:
   std::vector<Value> getValueStack() {
     return ValueStack;
   }
-  
-  void setFrameStack(std::vector<Frame> fs) {
-    FrameStack = fs;
-  }
-  void setValueStack(std::vector<Value> vs) {
-    ValueStack = vs;
+  std::vector<uint8_t> getTypeStack() {
+    return TypeStack;
   }
   
 private:
   /// \name Data of stack manager.
   /// @{
   std::vector<Value> ValueStack;
+  std::vector<uint8_t> TypeStack;
   std::vector<Frame> FrameStack;
   /// @}
 };

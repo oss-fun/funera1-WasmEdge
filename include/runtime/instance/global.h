@@ -39,38 +39,46 @@ public:
   /// Getter of value.
   ValVariant &getValue() noexcept { return Value; }
 
-  // Migration functions
-  // filename = globinst_{i}
-  void dump(std::string filename) const noexcept {
-    std::ofstream valueStream;
-
-    // Open file
-    std::string valueFile = filename + "_value.img";
-    valueStream.open(valueFile, std::ios::trunc);
-
+  void dump(std::ofstream &ofs) const noexcept {
     // TODO: uint32_t型以外の場合どうなるのか(int32_tとかは同じ値が出力された)
-    valueStream << Value.get<uint128_t>() << std::endl;
+    uint32_t v32;
+    uint64_t v64;
+    uint128_t v128;
 
-    // Close file
-    valueStream.close();
+    switch (GlobType.getValType()) {
+      case ValType::I32:
+      case ValType::F32:
+        v32 = Value.get<uint32_t>();
+        ofs.write(reinterpret_cast<char*>(&v32), sizeof(uint32_t));
+        break;
+      case ValType::I64:
+      case ValType::F64:
+        v64 = Value.get<uint64_t>();
+        ofs.write(reinterpret_cast<char*>(&v64), sizeof(uint64_t));
+        break;
+      default:
+        v128 = Value.get<uint128_t>();
+        ofs.write(reinterpret_cast<char*>(&v128), sizeof(uint128_t));
+        break;
+    }
   }
 
-  void restore(std::string filename)  noexcept {
-    // restoreFileをparseする
-    std::ifstream valueStream;
-
-    // Open file
-    std::string valueFile = filename + "_value.img";
-    valueStream.open(valueFile);
-
-    // Restore Value
-    std::string valueString;
-    getline(valueStream, valueString);
-    Value = static_cast<uint128_t>(std::stoul(valueString));
-
-    // Close file
-    valueStream.close();
+  void restore(std::ifstream &ifs)  noexcept {
+    switch (GlobType.getValType()) {
+      case ValType::I32:
+      case ValType::F32:
+        ifs.read(reinterpret_cast<char*>(&Value), sizeof(uint32_t));
+        break;
+      case ValType::I64:
+      case ValType::F64:
+        ifs.read(reinterpret_cast<char*>(&Value), sizeof(uint64_t));
+        break;
+      default:
+        ifs.read(reinterpret_cast<char*>(&Value), sizeof(uint128_t));
+        break;
+    }
   }
+
 private:
   /// \name Data of global instance.
   /// @{

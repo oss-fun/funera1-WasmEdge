@@ -45,8 +45,9 @@ Executor::enterFunction(Runtime::StackManager &StackMgr,
     Runtime::CallingFrame CallFrame(this, ModInst);
 
     // Push frame.
-    StackMgr.pushFrame(Func.getModule(), // Module instance
+    StackMgr.pushFrameExt(Func.getModule(), // Module instance
                        RetIt,            // Return PC
+                       &Func,
                        ArgsN,            // Only args, no locals in stack
                        RetsN,            // Returns num
                        IsTailCall        // For tail-call
@@ -86,8 +87,20 @@ Executor::enterFunction(Runtime::StackManager &StackMgr,
     }
 
     // Push returns back to stack.
-    for (auto &R : Rets) {
-      StackMgr.push(std::move(R));
+    std::vector<ValType> RetTypes = FuncType.getReturnTypes();
+    for (uint32_t I = 0; I < Rets.size(); I++) {
+      auto &R = Rets[I];
+
+      if (RetTypes[I] == ValType::I32 || RetTypes[I] == ValType::F32) {
+        StackMgr.push(std::move(R), 1);
+      }
+      else if (RetTypes[I] == ValType::I64 || RetTypes[I] == ValType::F64) {
+        StackMgr.push(std::move(R), 2);
+      }
+      else {
+        StackMgr.push(std::move(R), 4);
+      }
+      
     }
 
     // For host function case, the continuation will be the continuation from
@@ -98,8 +111,9 @@ Executor::enterFunction(Runtime::StackManager &StackMgr,
     // continuation.
 
     // Push frame.
-    StackMgr.pushFrame(Func.getModule(), // Module instance
+    StackMgr.pushFrameExt(Func.getModule(), // Module instance
                        RetIt,            // Return PC
+                       &Func,
                        ArgsN,            // Only args, no locals in stack
                        RetsN,            // Returns num
                        IsTailCall        // For tail-call
@@ -155,15 +169,26 @@ Executor::enterFunction(Runtime::StackManager &StackMgr,
     // Push local variables into the stack.
     for (auto &Def : Func.getLocals()) {
       for (uint32_t I = 0; I < Def.first; I++) {
-        StackMgr.push(ValueFromType(Def.second));
+        if (Def.second == ValType::I32 || Def.second == ValType::F32) {
+          StackMgr.push(ValueFromType(Def.second), 1);
+        }
+        else if (Def.second == ValType::I64 || Def.second == ValType::F64) {
+          StackMgr.push(ValueFromType(Def.second), 2);
+        }
+        else {
+          StackMgr.push(ValueFromType(Def.second), 4);
+          std::cerr << "[ERROR]unsupported 128bit value" << std::endl;
+          exit(1);
+        }
       }
     }
 
     // Push frame.
     // The PC must -1 here because in the interpreter mode execution, the PC
     // will increase after the callee return.
-    StackMgr.pushFrame(Func.getModule(),           // Module instance
+    StackMgr.pushFrameExt(Func.getModule(),           // Module instance
                        RetIt - 1,                  // Return PC
+                       &Func,
                        ArgsN + Func.getLocalNum(), // Arguments num + local num
                        RetsN,                      // Returns num
                        IsTailCall                  // For tail-call

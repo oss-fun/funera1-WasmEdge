@@ -87,6 +87,7 @@ Expect<void> Executor::runCallOp(Runtime::StackManager &StackMgr,
   // Get Function address.
   const auto *ModInst = StackMgr.getModule();
   const auto *FuncInst = *ModInst->getFunc(Instr.getTargetIndex());
+  // std::cout << "[DEBUG]enter function idx: " << Instr.getTargetIndex() << std::endl;
   if (auto Res = enterFunction(StackMgr, *FuncInst, PC + 1, IsTailCall); !Res) {
     return Unexpect(Res);
   } else {
