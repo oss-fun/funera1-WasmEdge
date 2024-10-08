@@ -104,6 +104,7 @@ public:
     }
     if (Stat) {
       Stat->setCostLimit(Conf.getStatisticsConfigure().getCostLimit());
+      Stat->setDispatchLimit(Conf.getStatisticsConfigure().getDispatchLimit());
     }
   }
   ~Executor() noexcept {

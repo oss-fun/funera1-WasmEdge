@@ -177,11 +177,19 @@ public:
   uint64_t getCostLimit() const noexcept {
     return CostLimit.load(std::memory_order_relaxed);
   }
-  
+
+  void setDispatchLimit(uint64_t Count) noexcept {
+    DispatchLimit.store(Count, std::memory_order_relaxed);
+  }
+
+  uint64_t getDispatchLimit() const noexcept {
+    return DispatchLimit.load(std::memory_order_relaxed);
+  }
+
   void setDumpFlag(bool flag) noexcept {
     DumpFlag.store(flag, std::memory_order_relaxed);
   }
-  
+
   bool getDumpFlag() const noexcept {
     return DumpFlag.load(std::memory_order_relaxed);
   }
@@ -207,7 +215,7 @@ public:
   void setDebugMode(bool flag) noexcept {
     DebugMode.store(flag, std::memory_order_relaxed);
   }
-  
+
   bool getDebugMode() const noexcept {
     return DebugMode.load(std::memory_order_relaxed);
   }
@@ -220,6 +228,7 @@ private:
   std::atomic<bool> RestoreFlag   = false;
   std::atomic<bool> DebugMode     = false;
   std::atomic<uint64_t> CostLimit = UINT64_C(-1);
+  std::atomic<uint64_t> DispatchLimit = UINT64_C(-1);
 
   mutable std::shared_mutex Mutex;
   std::string ImageDir = "";

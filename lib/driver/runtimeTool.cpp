@@ -74,6 +74,12 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
     Timeout = std::chrono::system_clock::now() +
               std::chrono::milliseconds(Opt.TimeLim.value());
   }
+  if (Opt.DispatchLim.value() > 0) {
+    std::cerr << "Opt.DispatchLim.value(): " << Opt.DispatchLim.value() << std::endl;
+    Conf.getStatisticsConfigure().setInstructionCounting(true);
+    Conf.getStatisticsConfigure().setDispatchLimit(
+        static_cast<uint32_t>(Opt.DispatchLim.value()));
+  }
   if (Opt.GasLim.value().size() > 0) {
     Conf.getStatisticsConfigure().setCostMeasuring(true);
     Conf.getStatisticsConfigure().setCostLimit(

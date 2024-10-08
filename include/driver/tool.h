@@ -77,6 +77,10 @@ struct DriverToolOptions {
             PO::Description(
                 "Limitation of maximum time(in milliseconds) for execution, default value is 0 for no limitations"sv),
             PO::MetaVar("TIMEOUT"sv), PO::DefaultValue<uint64_t>(0)),
+        DispatchLim(
+            PO::Description(
+                "Limitation of maximum dispatch(execution count) for execution, default value is 0 for no limitations"sv),
+            PO::MetaVar("DISPATCH_LIMIT"sv), PO::DefaultValue<uint64_t>(0)),
         GasLim(
             PO::Description(
                 "Limitation of execution gas. Upper bound can be specified as --gas-limit `GAS_LIMIT`."sv),
@@ -115,6 +119,7 @@ struct DriverToolOptions {
   PO::List<std::string> ImageDir;
   PO::Option<PO::Toggle> DebugMode;
   PO::Option<uint64_t> TimeLim;
+  PO::Option<uint64_t> DispatchLim;
   PO::List<int> GasLim;
   PO::List<int> MemLim;
   PO::List<std::string> ForbiddenPlugins;
@@ -148,6 +153,7 @@ struct DriverToolOptions {
         .add_option("image-dir"sv, ImageDir)
         .add_option("debug-mode"sv, DebugMode)
         .add_option("time-limit"sv, TimeLim)
+        .add_option("dispatch-limit"sv, DispatchLim)
         .add_option("gas-limit"sv, GasLim)
         .add_option("memory-page-limit"sv, MemLim)
         .add_option("forbidden-plugin"sv, ForbiddenPlugins);
