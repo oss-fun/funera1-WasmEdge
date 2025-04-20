@@ -43,6 +43,7 @@ namespace WasmEdge {
 
 namespace Executor {
 class Executor;
+class Migrator;
 }
 
 namespace Runtime {

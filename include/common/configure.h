@@ -163,7 +163,10 @@ public:
   StatisticsConfigure(const StatisticsConfigure &RHS) noexcept
       : InstrCounting(RHS.InstrCounting.load(std::memory_order_relaxed)),
         CostMeasuring(RHS.CostMeasuring.load(std::memory_order_relaxed)),
-        TimeMeasuring(RHS.TimeMeasuring.load(std::memory_order_relaxed)) {}
+        TimeMeasuring(RHS.TimeMeasuring.load(std::memory_order_relaxed)),
+        DumpFlag(RHS.DumpFlag.load(std::memory_order_relaxed)),
+        RestoreFlag(RHS.RestoreFlag.load(std::memory_order_relaxed)) ,
+        ImageDir(RHS.getImageDir()){}
 
   void setInstructionCounting(bool IsCount) noexcept {
     InstrCounting.store(IsCount, std::memory_order_relaxed);
@@ -197,12 +200,51 @@ public:
     return CostLimit.load(std::memory_order_relaxed);
   }
 
+  void setDumpFlag(bool flag) noexcept {
+    DumpFlag.store(flag, std::memory_order_relaxed);
+  }
+  
+  bool getDumpFlag() const noexcept {
+    return DumpFlag.load(std::memory_order_relaxed);
+  }
+
+  void setImageDir(std::string dir) noexcept {
+    std::unique_lock Lock(Mutex);
+    ImageDir = dir;
+  }
+
+  std::string getImageDir() const noexcept {
+    std::shared_lock Lock(Mutex);
+    return ImageDir;
+  }
+
+  void setRestoreFlag(bool flag) noexcept {
+    RestoreFlag.store(flag, std::memory_order_relaxed);
+  }
+
+  bool getRestoreFlag() const noexcept {
+    return RestoreFlag.load(std::memory_order_relaxed);
+  }
+
+  void setDebugMode(bool flag) noexcept {
+    DebugMode.store(flag, std::memory_order_relaxed);
+  }
+  
+  bool getDebugMode() const noexcept {
+    return DebugMode.load(std::memory_order_relaxed);
+  }
+
 private:
   std::atomic<bool> InstrCounting = false;
   std::atomic<bool> CostMeasuring = false;
   std::atomic<bool> TimeMeasuring = false;
+  std::atomic<bool> DumpFlag      = false;
+  std::atomic<bool> RestoreFlag   = false;
+  std::atomic<bool> DebugMode     = false;
 
   std::atomic<uint64_t> CostLimit = std::numeric_limits<uint64_t>::max();
+  mutable std::shared_mutex Mutex;
+  std::string ImageDir = "";
 };
 
 class Configure {

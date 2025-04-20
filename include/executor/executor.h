@@ -24,6 +24,7 @@
 #include "runtime/instance/module.h"
 #include "runtime/stackmgr.h"
 #include "runtime/storemgr.h"
+#include "executor/migrator.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -121,6 +122,7 @@ private:
   std::function<void(void *)> PostHostFunc = {};
   mutable std::shared_mutex Mutex;
 };
+
 
 /// Executor flow control class.
 class Executor {

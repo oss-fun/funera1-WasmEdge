@@ -6,9 +6,32 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <signal.h>
+#include <fcntl.h>
 
 namespace WasmEdge {
 namespace Executor {
+
+// TODO: signumの処理無駄なのでどうにかする
+volatile sig_atomic_t DumpFlag;
+void signalHandler(int signum) {
+  // NOTE: DumpFlag = 1としたいが、WasmEdgeのlinterが関数の引数を使わないコードを許さないので、DumpFlag = signum|1としている
+  DumpFlag = signum|1;
+}
+
+int64_t getTime(timespec ts1) {
+  int64_t sec = ts1.tv_sec;
+  int64_t nsec = ts1.tv_nsec;
+  // std::cerr << sec << ", " << nsec << std::endl;
+  return sec * 1e9 + nsec;
+}
+
+int64_t getTime(timespec ts1, timespec ts2) {
+  int64_t sec = ts2.tv_sec - ts1.tv_sec;
+  int64_t nsec = ts2.tv_nsec - ts1.tv_nsec;
+  // std::cerr << sec << ", " << nsec << std::endl;
+  return sec * 1e9 + nsec;
+}
 
 Expect<void> Executor::runExpression(Runtime::StackManager &StackMgr,
                                      AST::InstrView Instrs) {
@@ -56,7 +79,60 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       return Unexpect(GetIt);
     }
   }
+
   if (Res) {
+    if (!Conf.getStatisticsConfigure().getDumpFlag() || Conf.getStatisticsConfigure().getRestoreFlag()) {
+      Migr.Prepare(Func.getModule(), Conf.getStatisticsConfigure().getImageDir());
+    }
+
+    // Restore
+    if (RestoreFlag && Conf.getStatisticsConfigure().getRestoreFlag()) {
+      const std::string imageDir = Conf.getStatisticsConfigure().getImageDir();
+      std::cerr << "imageDir: " << imageDir << std::endl;
+
+      auto Res = Migr.restoreProgramCounter(Func.getModule());
+      if (!Res) {
+        return Unexpect(Res);
+      }
+
+      struct timespec ts1, ts2;
+      clock_gettime(CLOCK_MONOTONIC, &ts1);
+      std::cerr << "boot_end, " << getTime(ts1) << std::endl;
+
+      clock_gettime(CLOCK_MONOTONIC, &ts1);
+      Migr.restoreMemory(StackMgr.getModule());
+      clock_gettime(CLOCK_MONOTONIC, &ts2);
+      std::cerr << "memory, " << getTime(ts1, ts2) << std::endl;
+
+      clock_gettime(CLOCK_MONOTONIC, &ts1);
+      Migr.restoreGlobal(StackMgr.getModule());
+      clock_gettime(CLOCK_MONOTONIC, &ts2);
+      std::cerr << "global, " << getTime(ts1, ts2) << std::endl;
+
+      clock_gettime(CLOCK_MONOTONIC, &ts1);
+      StartIt = Res.value();
+      clock_gettime(CLOCK_MONOTONIC, &ts2);
+      std::cerr << "program counter, " << getTime(ts1, ts2) << std::endl;
+
+      clock_gettime(CLOCK_MONOTONIC, &ts1);
+      Migr.restoreStack(StackMgr);
+      clock_gettime(CLOCK_MONOTONIC, &ts2);
+      std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;
+
+      // debug: wamrから取り込んだimageをリストアしてすぐdumpすると、同じものが出てくるはず
+      // Migr.dumpMemory(StackMgr.getModule());
+      // std::cerr << "Success dumpMemory" << std::endl;
+      // Migr.dumpGlobal(StackMgr.getModule());
+      // std::cerr << "Success dumpGlobal" << std::endl;
+      // Migr.dumpProgramCounter(StackMgr.getModule(), StartIt);
+      // std::cerr << "Success dumpIter" << std::endl;
+
+      // Migr.dumpStack(StackMgr, StartIt);
+      // std::cerr << "Success dumpStack" << std::endl;
+
+      RestoreFlag = false;
+    }
+
     // If not terminated, execute the instructions in interpreter mode.
     // For the entering AOT or host functions, the `StartIt` is equal to the end
     // of instruction list, therefore the execution will return immediately.
@@ -2140,14 +2216,30 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
     }
   };
 
+  // signal handler
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = signalHandler;
+  sigaction(SIGINT, &sa, nullptr);
+
+  const uint8_t isInstructionCounting = Conf.getStatisticsConfigure().isInstructionCounting();
+  const uint8_t isCostMeasuring = Conf.getStatisticsConfigure().isCostMeasuring();
+  const uint8_t isDumpMode = !Conf.getStatisticsConfigure().getDumpFlag();
+  // int dispatch_count = 0;
+  // int dispatch_limit = 1000;
+
   while (PC != PCEnd) {
+    // dispatch_count++;
+    // if (dispatch_count == dispatch_limit) DumpFlag = true;
+
+
     if (Stat) {
       OpCode Code = PC->getOpCode();
-      if (Conf.getStatisticsConfigure().isInstructionCounting()) {
+      if (isInstructionCounting) {
         Stat->incInstrCount();
       }
       // Add cost. Note: if-else case should be processed additionally.
-      if (Conf.getStatisticsConfigure().isCostMeasuring()) {
+      if (isCostMeasuring) {
         if (unlikely(!Stat->addInstrCost(Code))) {
           const AST::Instruction &Instr = *PC;
           spdlog::error(
@@ -2156,13 +2248,63 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
         }
       }
     }
+
+    /* NOTE
+        DumpFlag: checkpointシグナルを受け取ったときに1が代入される。受け取るまでは0が入る。
+        isDumpMode: --no-checkpointオプションがない場合に1、ある場合に0が入る 
+    */
+    if (unlikely(DumpFlag&isDumpMode)) {
+
+      if (!Migr.isExistTypeStackTable()) {
+        spdlog::error("Not found type stack tables (type_table, type_tablemap_func, type_tablemap_offset)");
+        return {};
+      }
+
+      struct timespec ts1, ts2;
+      // clock_gettime(CLOCK_MONOTONIC, &t_ts1);
+      // For WasmEdge
+      clock_gettime(CLOCK_MONOTONIC, &ts1);
+      Migr.dumpMemory(StackMgr.getModule());
+      clock_gettime(CLOCK_MONOTONIC, &ts2);
+      std::cerr << "memory, " << getTime(ts1, ts2) << std::endl;
+      // std::cerr << "Success dumpMemory" << std::endl;
+
+      clock_gettime(CLOCK_MONOTONIC, &ts1);
+      Migr.dumpGlobal(StackMgr.getModule());
+      clock_gettime(CLOCK_MONOTONIC, &ts2);
+      std::cerr << "global, " << getTime(ts1, ts2) << std::endl;
+
+      // std::cerr << "Success dumpGlobal" << std::endl;
+      clock_gettime(CLOCK_MONOTONIC, &ts1);
+      Migr.dumpProgramCounter(StackMgr.getModule(), PC);
+      clock_gettime(CLOCK_MONOTONIC, &ts2);
+      std::cerr << "program counter, " << getTime(ts1, ts2) << std::endl;
+      // std::cerr << "Success dumpIter" << std::endl;
+
+      clock_gettime(CLOCK_MONOTONIC, &ts1);
+      Migr.dumpStack(StackMgr, PC);
+      clock_gettime(CLOCK_MONOTONIC, &ts2);
+      std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;
+      // std::cerr << "Success dumpStack" << std::endl;
+      return {};
+    }
+
+
+    // OpCode Code = PC->getOpCode();
+    // std::cout << "[DEBUG]OpCode: 0x" << std::hex << (uint16_t)Code << std::dec << std::endl;
     if (auto Res = Dispatch(); !Res) {
+      // SourceLoc PCSourceLoc = Migr.getSourceLoc(PC);
+      // std::cout << "[WASMEDGE ERROR] PC is " << PCSourceLoc.FuncIdx << " " << PCSourceLoc.Offset << std::endl;
+      // InteractiveMode(breakpoint, PCSourceLoc, StackMgr);
       return Unexpect(Res);
     }
+
     PC++;
   }
   return {};
 }
+
+
 
 } // namespace Executor
 } // namespace WasmEdge

@@ -1,0 +1,10 @@
+--- lib/executor/engine/engine.cpp
++++ lib/executor/engine/engine.cpp
+@@ -52,6 +75,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
+ 
+   // Push arguments.
+   for (auto &Val : Params) {
++    std::cerr << "[DEBUG]runFunction Params: " << Val.get<uint128_t>() << std::endl;
+     StackMgr.push(Val);
+   }
+ 

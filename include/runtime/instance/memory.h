@@ -19,6 +19,7 @@
 #include "common/spdlog.h"
 #include "system/allocator.h"
 
+#include <unistd.h>
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -26,6 +27,7 @@
 #include <memory>
 #include <set>
 #include <utility>
+#include <iostream>
 
 namespace WasmEdge {
 namespace Runtime {
@@ -332,6 +334,202 @@ public:
   }
 
   uint8_t *getDataPtr() const noexcept { return DataPtr; }
+
+  // Migration functions
+
+  // filename = meminst_{i}
+  Expect<void> dump(std::string filename) {
+    if (auto Res = dumpMemType(filename); !Res) {
+      return Unexpect(Res);
+    }
+    
+    if (auto Res = dumpDataPtr(filename); !Res) {
+      return Unexpect(Res);
+    }
+
+    return {};
+  }
+  
+  Expect<void> dumpMemType(std::string filename) {
+    // Open file
+    filename = filename + "mem_page_count.img";
+    // filename = filename + "_memtype.img";
+    uint32_t CurPageCount = MemType.getLimit().getMin();
+
+    std::ofstream fout;
+    fout.open(filename, std::ios::trunc | std::ios::binary);
+    fout.write(reinterpret_cast<char *>(&CurPageCount), sizeof(CurPageCount));
+
+    fout.close();
+    return {};
+  }
+
+  bool IsDirtyPage(uint64_t PageMapEntry) {
+    return (PageMapEntry >> 62 & 1) | (PageMapEntry >> 63 & 1);
+  }
+
+  bool IsSoftDirtyPage(uint64_t PageMapEntry) {
+    return (PageMapEntry >> 55 & 1);
+  }
+
+  Expect<int> dumpDirtyMemory(Span<Byte> &Data, std::ofstream &ofs) {
+    const uint32_t PAGEMAP_LENGTH = 8;
+    const uint32_t PAGE_SIZE = 4096;
+
+    // プロセスのpagemapを開く
+    FILE* PageMap = fopen("/proc/self/pagemap", "rb");
+    if (PageMap == NULL) {
+        perror("Error opening pagemap");
+        return -1;
+    }
+
+    uint8_t* BegAddr = Data.data();
+    uint8_t* EndAddr = BegAddr + Data.size();
+    uint64_t PageMapEntry;
+    for (uint8_t* Addr = BegAddr; Addr < EndAddr; Addr += PAGE_SIZE) {
+      uint64_t pfn = (uint64_t)Addr / PAGE_SIZE;
+      off64_t Offset = sizeof(uint64_t) * pfn;
+
+      if (fseek(PageMap, Offset, SEEK_SET) == -1) {
+          perror("[ERROR]Failed seeking to pagemap entry");
+          fclose(PageMap);
+          return -1;
+      }
+
+      if (fread(&PageMapEntry, PAGEMAP_LENGTH, 1, PageMap) == 0) {
+          perror("[ERROR]Failed reading pagemap entry");
+          fclose(PageMap);
+          return -1;
+      }
+
+      if (IsDirtyPage(PageMapEntry)) {
+        uint32_t MemInstAddr = Addr - BegAddr;
+        ofs.write(reinterpret_cast<char *>(&MemInstAddr), sizeof(uint32_t));
+        ofs.write(reinterpret_cast<char *>(Addr), PAGE_SIZE);
+      }
+    }
+    return 0;
+  }
+  
+  Expect<void> dumpDataPtr(std::string filename) {
+    // Open file
+    // filename = filename + "_dataptr.img";
+    filename = filename + "memory.img";
+    std::ofstream ofs(filename, std::ios::trunc | std::ios::binary);
+    if (!ofs) {
+      return Unexpect(ErrCode::Value::IllegalPath);
+    }
+
+    // DataPtrをfileにdump
+    auto Res = getBytes(0, MemType.getLimit().getMin() * kPageSize);
+    if (unlikely(!Res)) {
+      return Unexpect(Res);
+    }
+    Span<Byte> Data = Res.value();
+    dumpDirtyMemory(Data, ofs);
+    ofs.close();
+
+    // デバッグのために全部吐き出すやつもやる
+    // std::ofstream ofs2("all_memory.img", std::ios::trunc | std::ios::binary);
+    // if (!ofs2) {
+    //   return Unexpect(ErrCode::Value::IllegalPath);
+    // }
+    // ofs2.write(reinterpret_cast<char*>(Data.data()), Data.size());
+    // ofs2.close();
+    return {};
+  }
+  
+  
+  Expect<void> restore(std::string filename) noexcept {
+    // Restore MemType
+    uint32_t oldPageSize = getPageSize();
+    uint32_t newPageSize;
+
+    if (auto Res = restoreMemType(filename)) {
+      newPageSize = Res.value();
+      // 新しいページサイズが前のページサイズを下回ることはないはず
+      // static_assert(newPageSize >= oldPageSize);
+
+      if (growPage(newPageSize - oldPageSize)) {
+        MemType.getLimit().setMin(newPageSize);
+      }
+      else {
+        return Unexpect(ErrCode::Value::Terminated);
+      }
+    }
+    else {
+      return Unexpect(Res);
+    }
+    
+    // Restore DataPtr
+    if (auto Res = restoreDirtyMemory(filename); !Res) {
+      return Unexpect(Res);
+    }
+
+    return {};
+  }
+  
+  Expect<uint32_t> restoreMemType(std::string filename) {
+    // Restore MemType
+    // filename = filename + "_memtype.img";
+    filename = filename + "mem_page_count.img";
+    std::ifstream ifs(filename, std::ios::binary);
+    if (!ifs) {
+      return Unexpect(ErrCode::Value::IllegalPath);
+    }
+    
+    uint32_t mem_page_count;
+    ifs.read(reinterpret_cast<char*>(&mem_page_count), sizeof(uint32_t));
+    ifs.close();
+
+    return mem_page_count;
+  }
+
+  Expect<void> restoreDirtyMemory(std::string filename) {
+    filename = filename + "memory.img";
+    std::ifstream ifs(filename, std::ios::binary);
+    if (!ifs) {
+      return Unexpect(ErrCode::Value::IllegalPath);
+    }
+
+    const uint32_t PAGE_SIZE = 4096;
+    std::vector<uint8_t> memory(PAGE_SIZE);
+    uint32_t MemInstAddr;
+    while (1) {
+      ifs.read(reinterpret_cast<char *>(&MemInstAddr), sizeof(uint32_t));
+      if (ifs.eof()) break;
+      // std::cerr << "[DEBUG]restore page: " << offset << std::endl;
+
+      ifs.read(reinterpret_cast<char *>(memory.data()), PAGE_SIZE);
+      if (auto Res = setBytes(Span<Byte>(memory), MemInstAddr, 0, PAGE_SIZE); !Res) {
+        return Unexpect(Res);
+      } 
+    }
+
+    ifs.close();
+    return {};
+  }
+  
+  Expect<std::vector<uint8_t>> restoreDataPtr(std::string filename) {
+    // filename = filename + "_dataptr.img";
+    filename = filename + "all_memory.img";
+    std::ifstream ifs(filename, std::ios::binary);
+    if (!ifs) {
+      return Unexpect(ErrCode::Value::IllegalPath);
+    }
+    // ファイルのサイズを取得
+    ifs.seekg(0, std::ios::end);
+    int length = ifs.tellg();
+    ifs.seekg(0, std::ios::beg);
+
+    std::vector<uint8_t> vec(length);
+    ifs.read(reinterpret_cast<char*>(vec.data()), length);
+    if (!ifs) {
+      // static_assert(ifs, "dataptr.imgから読み込みが成功しなかった");      
+    }
+    ifs.close();
+    return vec;
+  }
 
 private:
   /// \name Data of memory instance.

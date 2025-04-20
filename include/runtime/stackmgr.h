@@ -212,6 +212,14 @@ public:
     FrameStack.clear();
   }
 
+  // TODO: protectedとかつける
+  std::vector<Frame> getFrameStack() {
+    return FrameStack;
+  }
+  std::vector<Value> getValueStack() {
+    return ValueStack;
+  }
+  
 private:
   /// \name Data of stack manager.
   /// @{

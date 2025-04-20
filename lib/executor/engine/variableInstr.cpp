@@ -10,7 +10,7 @@ namespace Executor {
 
 Expect<void> Executor::runLocalGetOp(Runtime::StackManager &StackMgr,
                                      uint32_t StackOffset) const noexcept {
-  StackMgr.push(StackMgr.getTopN(StackOffset));
+   StackMgr.push(StackMgr.getTopN(StackOffset));
   return {};
 }
 

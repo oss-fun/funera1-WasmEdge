@@ -12,11 +12,22 @@
 namespace WasmEdge {
 namespace Driver {
 
+int64_t getTime(timespec ts1) {
+  int64_t sec = ts1.tv_sec;
+  int64_t nsec = ts1.tv_nsec;
+  // std::cerr << sec << ", " << nsec << std::endl;
+  return sec * 1e9 + nsec;
+}
+
 int UniTool(int Argc, const char *Argv[], const ToolType ToolSelect) noexcept {
   using namespace std::literals;
 
   std::ios::sync_with_stdio(false);
   Log::setInfoLoggingLevel();
+
+  struct timespec ts1;
+  clock_gettime(CLOCK_MONOTONIC, &ts1);
+  std::cerr << "boot_start, " << getTime(ts1) << std::endl;
 
   auto Parser = PO::ArgumentParser();
 

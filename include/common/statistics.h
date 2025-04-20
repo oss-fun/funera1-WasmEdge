@@ -182,12 +182,27 @@ public:
     }
   }
 
+  // DumpFlag
+  void setDumpFlag(bool f) { DumpFlag = f; }
+  bool getDumpFlag()       { return DumpFlag; }
+  
+  // RestoreFlag
+  void setRestoreFlag(bool f) { RestoreFlag = f; }
+  bool getRestoreFlag()       { return RestoreFlag; }
+  
+  // DebugMode
+  void setDebugMode(bool f) { DebugMode = f; }
+  bool getDebugMode()       { return DebugMode; }
+
 private:
   std::vector<uint64_t> CostTab;
   std::atomic_uint64_t InstrCnt;
   uint64_t CostLimit;
   std::atomic_uint64_t CostSum;
   Timer::Timer TimeRecorder;
+  bool DumpFlag;
+  bool RestoreFlag;
+  bool DebugMode;
 };
 
 } // namespace Statistics
