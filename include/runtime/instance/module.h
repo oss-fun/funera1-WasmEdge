@@ -462,6 +462,65 @@ protected:
     return StartFunc;
   }
 
+  // Migration function
+  void dumpMemInst(const std::string ImageDir) const noexcept {
+    // std::unique_lock Lock(Mutex);
+    // MemoryInstanceの保存
+    for (uint32_t I = 0; I < getMemoryNum(); ++I) {
+        auto Res = getMemory(I);
+        MemoryInstance* MemInst = Res.value();
+        if (I == 0) {
+            MemInst->dump(ImageDir);
+        }
+        else {
+            MemInst->dump(ImageDir + std::to_string(I));
+        }
+    }
+  }
+
+  void restoreMemInst(const std::string ImageDir) const noexcept {
+    for (uint32_t I = 0; I < getMemoryNum(); ++I) {
+      auto Res = getMemory(I);
+      MemoryInstance* MemInst = Res.value();
+      if (I == 0) {
+          MemInst->restore(ImageDir);
+      }
+      else {
+          MemInst->restore(ImageDir + std::to_string(I));
+      }
+
+    }
+  }
+  
+  Expect<void> dumpGlobInst(const std::string ImageDir) const noexcept {
+    std::ofstream ofs(ImageDir + "global.img", std::ios::trunc | std::ios::binary);
+    if (!ofs) {
+      return Unexpect(ErrCode::Value::IllegalPath);
+    }
+
+    for (uint32_t I = 0; I < getGlobalNum(); ++I) {
+        auto Res = getGlobal(I);
+        GlobalInstance* GlobInst = Res.value();
+        GlobInst->dump(ofs);
+    }
+    return {};
+  }
+
+  Expect<void> restoreGlobInst(const std::string ImageDir) const noexcept {
+    std::ifstream ifs(ImageDir + "global.img", std::ios::binary);
+    if (!ifs) {
+      return Unexpect(ErrCode::Value::IllegalPath);
+    }
+
+    // std::unique_lock Lock(Mutex);
+    for (uint32_t I = 0; I < getGlobalNum(); ++I) {
+        auto Res = getGlobal(I);
+        GlobalInstance* GlobInst = Res.value();
+        GlobInst->restore(ifs);
+    }
+    return {};
+  }
+
   /// Unsafe import instance into this module.
   template <typename T>
   std::enable_if_t<IsEntityV<T>, void>
