@@ -29,10 +29,10 @@ namespace Statistics {
 class Statistics {
 public:
   Statistics(const uint64_t Lim = UINT64_MAX)
-      : CostTab(UINT16_MAX + 1, 1ULL), InstrCnt(0), CostLimit(Lim), CostSum(0) {
+      : CostTab(UINT16_MAX + 1, 1ULL), InstrCnt(0), CostLimit(Lim), DispatchLimit(Lim), CostSum(0) {
   }
   Statistics(Span<const uint64_t> Tab, const uint64_t Lim = UINT64_MAX)
-      : CostTab(Tab.begin(), Tab.end()), InstrCnt(0), CostLimit(Lim),
+      : CostTab(Tab.begin(), Tab.end()), InstrCnt(0), CostLimit(Lim), DispatchLimit(Lim),
         CostSum(0) {
     if (CostTab.size() < UINT16_MAX + 1) {
       CostTab.resize(UINT16_MAX + 1, 0ULL);
@@ -80,6 +80,10 @@ public:
   /// Getter and setter of cost limit.
   void setCostLimit(uint64_t Lim) { CostLimit = Lim; }
   uint64_t getCostLimit() const { return CostLimit; }
+
+  /// Getter and setter of dispatch limit.
+  void setDispatchLimit(uint64_t Lim) { DispatchLimit = Lim; }
+  uint64_t getDispatchLimit() const { return DispatchLimit; }
 
   /// Add cost and return false if exceeded limit.
   bool addCost(uint64_t Cost) {
@@ -198,6 +202,7 @@ private:
   std::vector<uint64_t> CostTab;
   std::atomic_uint64_t InstrCnt;
   uint64_t CostLimit;
+  uint64_t DispatchLimit;
   std::atomic_uint64_t CostSum;
   Timer::Timer TimeRecorder;
   bool DumpFlag;
