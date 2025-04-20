@@ -101,12 +101,11 @@ public:
   }
 
   /// Push a new frame entry to stack.
-  void pushFrame(const Instance::ModuleInstance *Module,
-                 AST::InstrView::iterator From, uint32_t LocalNum = 0,
-                 uint32_t Arity = 0, bool IsTailCall = false) noexcept {
-    if (!IsTailCall) {
-      FrameStack.emplace_back(Module, From, LocalNum, Arity,
-                              static_cast<uint32_t>(ValueStack.size()));
+  inline void _pushFrame(const Instance::ModuleInstance *Module,
+                 AST::InstrView::iterator From,
+                 uint32_t LocalNum, uint32_t Arity, uint32_t VPos, bool IsTailCall) noexcept {
+   if (!IsTailCall) {
+      FrameStack.emplace_back(Module, From, LocalNum, Arity, VPos);
     } else {
       assuming(!FrameStack.empty());
       assuming(FrameStack.back().VPos >= FrameStack.back().Locals);
@@ -118,9 +117,17 @@ public:
       FrameStack.back().Module = Module;
       FrameStack.back().Locals = LocalNum;
       FrameStack.back().Arity = Arity;
-      FrameStack.back().VPos = static_cast<uint32_t>(ValueStack.size());
+      FrameStack.back().VPos = VPos;
       FrameStack.back().HandlerStack.clear();
     }
+  }
+
+  /// Push a new frame entry to stack.
+  void pushFrame(const Instance::ModuleInstance *Module,
+                 AST::InstrView::iterator From, uint32_t LocalNum = 0,
+                 uint32_t Arity = 0, bool IsTailCall = false) noexcept {
+
+    _pushFrame(Module, From, LocalNum, Arity, ValueStack.size(), IsTailCall);
   }
 
   /// Unsafe pop top frame.

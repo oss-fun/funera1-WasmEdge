@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <signal.h>
 #include <fcntl.h>
 
@@ -189,6 +190,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
           ErrInfo::InfoInstruction(Instr.getOpCode(), Instr.getOffset()));
       return Unexpect(ErrCode::Value::Unreachable);
     case OpCode::Nop:
+      if (char* env = getenv("NOP_CKPT"); env && (std::string(env) == "1")) DumpFlag = 1;
       return {};
     case OpCode::Block:
       return {};
@@ -2229,10 +2231,6 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
   // int dispatch_limit = 1000;
 
   while (PC != PCEnd) {
-    // dispatch_count++;
-    // if (dispatch_count == dispatch_limit) DumpFlag = true;
-
-
     if (Stat) {
       OpCode Code = PC->getOpCode();
       if (isInstructionCounting) {
