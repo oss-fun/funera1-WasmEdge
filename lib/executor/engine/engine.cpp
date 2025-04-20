@@ -41,6 +41,8 @@ Expect<void> Executor::runExpression(Runtime::StackManager &StackMgr,
   return execute(StackMgr, Instrs.begin(), Instrs.end());
 }
 
+static Migrator Migr = Migrator();
+
 Expect<void>
 Executor::runFunction(Runtime::StackManager &StackMgr,
                       const Runtime::Instance::FunctionInstance &Func,

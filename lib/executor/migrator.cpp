@@ -1,21 +1,18 @@
 #include "executor/migrator.h"
-
-#include <iostream>
-#include <fstream>
-#include <cassert>
-#include <filesystem>
-#include <algorithm>
 #include <map>
-
-namespace fs = std::filesystem;
+#include <iostream>
+#include <vector>
+#include <string>
+#include <cassert>
 
 namespace WasmEdge {
+  
+namespace Runtime {
+  class StackManager;
+}
+
 namespace Executor {
     using M = Migrator;
-
-  /// ================
-  /// Tools
-  /// ================
 
   // void Prepare(const Runtime::Instance::ModuleInstance* ModInst) {
   void M::Prepare(const Runtime::Instance::ModuleInstance* ModInst, std::string dirname) {
@@ -149,7 +146,10 @@ namespace Executor {
       std::cerr << std::endl;
   }
   
-  std::vector<M::CtrlInfo> M::getCtrlStack(const AST::InstrView::iterator PCNow, Runtime::Instance::FunctionInstance *Func, const std::vector<uint32_t> &WamrCellSums) {
+//   std::vector<struct CtrlInfo> M::getCtrlStack(const AST::InstrView::iterator PCNow, Runtime::Instance::FunctionInstance *Func, const std::vector<uint32_t> &WamrCellSums) {
+  std::vector<M::CtrlInfo> M::getCtrlStack(const AST::InstrView::iterator PCNow,
+                                     Runtime::Instance::FunctionInstance *Func,
+                                     const std::vector<uint32_t> &WamrCellSums) {
     std::vector<M::CtrlInfo> CtrlStack;
 
     AST::InstrView::iterator PCStart = Func->getInstrs().begin();
@@ -210,10 +210,6 @@ namespace Executor {
   /// ================
   void M::dumpMemory(const Runtime::Instance::ModuleInstance* ModInst) {
     ModInst->dumpMemInst(ImageDir);
-  }
-
-  void M::dumpMemoryV1(const Runtime::Instance::ModuleInstance* ModInst) {
-    ModInst->dumpMemInst("./");
   }
 
   void M::dumpGlobal(const Runtime::Instance::ModuleInstance* ModInst) {
@@ -318,11 +314,11 @@ namespace Executor {
         exit(1);
       }
       Runtime::Instance::FunctionInstance* FuncInst = Res.value();
-      std::vector<M::CtrlInfo> CtrlStack = getCtrlStack(PC, FuncInst, WamrCellSums);
+      std::vector<struct CtrlInfo> CtrlStack = getCtrlStack(PC, FuncInst, WamrCellSums);
       uint32_t LenCs = CtrlStack.size();
       ofs.write(reinterpret_cast<char *>(&LenCs), sizeof(uint32_t));
       for (uint32_t I = 0; I < LenCs; I++) {
-        M::CtrlInfo ci = CtrlStack[I];
+        struct CtrlInfo ci = CtrlStack[I];
         ofs.write(reinterpret_cast<char *>(&ci.BeginAddrOfs), sizeof(uint32_t));
         ofs.write(reinterpret_cast<char *>(&ci.TargetAddrOfs), sizeof(uint32_t));
         ofs.write(reinterpret_cast<char *>(&ci.SpOfs), sizeof(uint32_t));
@@ -488,5 +484,4 @@ namespace Executor {
     return {};
   }
 
-} // namespace Runtime
 } // namespace WasmEdge

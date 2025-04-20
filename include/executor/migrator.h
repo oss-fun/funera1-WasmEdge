@@ -1,3 +1,4 @@
+// include/migrator/migrator.h
 #pragma once
 
 #include "ast/instruction.h"
@@ -17,11 +18,6 @@
 #include <algorithm>
 
 namespace WasmEdge {
-  
-namespace Runtime {
-  class StackManager;
-}
-
 namespace Executor {
 
 class Migrator {
