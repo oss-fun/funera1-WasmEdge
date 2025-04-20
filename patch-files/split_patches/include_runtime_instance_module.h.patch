@@ -1,0 +1,81 @@
+diff --git a/include/runtime/instance/module.h b/include/runtime/instance/module.h
+index 0a91c19d..c3962de1 100644
+--- a/include/runtime/instance/module.h
++++ b/include/runtime/instance/module.h
+@@ -38,6 +38,7 @@ namespace WasmEdge {
+ 
+ namespace Executor {
+ class Executor;
++class Migrator;
+ }
+ 
+ namespace Runtime {
+@@ -179,8 +180,68 @@ public:
+     return std::forward<CallbackT>(CallBack)(ExpGlobals);
+   }
+ 
++  // Migration function
++  void dumpMemInst(const std::string ImageDir) const noexcept {
++    // std::unique_lock Lock(Mutex);
++    // MemoryInstanceの保存
++    for (uint32_t I = 0; I < getMemoryNum(); ++I) {
++        auto Res = getMemory(I);
++        MemoryInstance* MemInst = Res.value();
++        if (I == 0) {
++            MemInst->dump(ImageDir);
++        }
++        else {
++            MemInst->dump(ImageDir + std::to_string(I));
++        }
++    }
++  }
++
++  void restoreMemInst(const std::string ImageDir) const noexcept {
++    for (uint32_t I = 0; I < getMemoryNum(); ++I) {
++      auto Res = getMemory(I);
++      MemoryInstance* MemInst = Res.value();
++      if (I == 0) {
++          MemInst->restore(ImageDir);
++      }
++      else {
++          MemInst->restore(ImageDir + std::to_string(I));
++      }
++
++    }
++  }
++  
++  Expect<void> dumpGlobInst(const std::string ImageDir) const noexcept {
++    std::ofstream ofs(ImageDir + "global.img", std::ios::trunc | std::ios::binary);
++    if (!ofs) {
++      return Unexpect(ErrCode::Value::IllegalPath);
++    }
++
++    for (uint32_t I = 0; I < getGlobalNum(); ++I) {
++        auto Res = getGlobal(I);
++        GlobalInstance* GlobInst = Res.value();
++        GlobInst->dump(ofs);
++    }
++    return {};
++  }
++
++  Expect<void> restoreGlobInst(const std::string ImageDir) const noexcept {
++    std::ifstream ifs(ImageDir + "global.img", std::ios::binary);
++    if (!ifs) {
++      return Unexpect(ErrCode::Value::IllegalPath);
++    }
++
++    // std::unique_lock Lock(Mutex);
++    for (uint32_t I = 0; I < getGlobalNum(); ++I) {
++        auto Res = getGlobal(I);
++        GlobalInstance* GlobInst = Res.value();
++        GlobInst->restore(ifs);
++    }
++    return {};
++  }
++
+ protected:
+   friend class Executor::Executor;
++  friend class Executor::Migrator;
+   friend class Runtime::CallingFrame;
+ 
+   /// Copy the function types in type section to this module instance.

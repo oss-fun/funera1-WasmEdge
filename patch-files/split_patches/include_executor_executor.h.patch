@@ -1,0 +1,30 @@
+diff --git a/include/executor/executor.h b/include/executor/executor.h
+index f3f5ef6e..b6f3fa22 100644
+--- a/include/executor/executor.h
++++ b/include/executor/executor.h
+@@ -24,6 +24,7 @@
+ #include "runtime/instance/module.h"
+ #include "runtime/stackmgr.h"
+ #include "runtime/storemgr.h"
++#include "executor/migrator.h"
+ 
+ #include <atomic>
+ #include <condition_variable>
+@@ -88,6 +89,7 @@ using TypeNN =
+ 
+ } // namespace
+ 
++
+ /// Executor flow control class.
+ class Executor {
+ public:
+@@ -688,6 +690,9 @@ private:
+   Statistics::Statistics *Stat;
+   /// Stop Execution
+   std::atomic_uint32_t StopToken = 0;
++  /// Migrator
++  Migrator Migr;
++  bool RestoreFlag = true;
+ };
+ 
+ } // namespace Executor

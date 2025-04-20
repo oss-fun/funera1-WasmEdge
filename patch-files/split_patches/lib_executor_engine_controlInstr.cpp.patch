@@ -1,0 +1,12 @@
+diff --git a/lib/executor/engine/controlInstr.cpp b/lib/executor/engine/controlInstr.cpp
+index b92e7a8f..f524c75b 100644
+--- a/lib/executor/engine/controlInstr.cpp
++++ b/lib/executor/engine/controlInstr.cpp
+@@ -87,6 +87,7 @@ Expect<void> Executor::runCallOp(Runtime::StackManager &StackMgr,
+   // Get Function address.
+   const auto *ModInst = StackMgr.getModule();
+   const auto *FuncInst = *ModInst->getFunc(Instr.getTargetIndex());
++  // std::cout << "[DEBUG]enter function idx: " << Instr.getTargetIndex() << std::endl;
+   if (auto Res = enterFunction(StackMgr, *FuncInst, PC + 1, IsTailCall); !Res) {
+     return Unexpect(Res);
+   } else {
