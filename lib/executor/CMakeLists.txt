@@ -30,10 +30,27 @@ wasmedge_add_library(wasmedgeExecutor
   engine/engine.cpp
   helper.cpp
   executor.cpp
+  migrator.cpp
 )
+
+include(FetchContent)
+FetchContent_Declare(
+    wasmig
+    GIT_REPOSITORY https://github.com/funera1/wasmig.git
+    GIT_TAG main
+)
+FetchContent_GetProperties(wasmig)
+if (NOT wasmig_POPULATED)
+    message ("-- Fetching wasmig ..")
+    FetchContent_Populate(wasmig)
+    include_directories("${wasmig_SOURCE_DIR}/include")
+    message(${wasmig_BINARY_DIR})
+    add_subdirectory(${wasmig_SOURCE_DIR} ${wasmig_BINARY_DIR})
+endif()
 
 target_link_libraries(wasmedgeExecutor
   PUBLIC
   wasmedgeCommon
   wasmedgeSystem
+  libwasmig
 )
