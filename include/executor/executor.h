@@ -936,6 +936,9 @@ private:
   std::atomic_uint32_t StopToken = 0;
   /// Executor Host Function Handler
   HostFuncHandler HostFuncHelper = {};
+  /// Migrator
+  Migrator Migr;
+  bool RestoreFlag = true;
 };
 
 } // namespace Executor
