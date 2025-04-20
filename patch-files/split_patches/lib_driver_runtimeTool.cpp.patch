@@ -1,0 +1,31 @@
+diff --git a/lib/driver/runtimeTool.cpp b/lib/driver/runtimeTool.cpp
+index c43e3076..db1abc31 100644
+--- a/lib/driver/runtimeTool.cpp
++++ b/lib/driver/runtimeTool.cpp
+@@ -83,6 +83,15 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
+     Conf.getRuntimeConfigure().setMaxMemoryPage(
+         static_cast<uint32_t>(Opt.MemLim.value().back()));
+   }
++  if (Opt.DumpFlag.value()) {
++    Conf.getStatisticsConfigure().setDumpFlag(true);
++  }
++  if (Opt.RestoreFlag.value()) {
++    Conf.getStatisticsConfigure().setRestoreFlag(true);
++  }
++  if (Opt.DebugMode.value()) {
++    Conf.getStatisticsConfigure().setDebugMode(true);
++  }
+   if (Opt.ConfEnableAllStatistics.value()) {
+     Conf.getStatisticsConfigure().setInstructionCounting(true);
+     Conf.getStatisticsConfigure().setCostMeasuring(true);
+@@ -105,6 +114,10 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
+   for (const auto &Name : Opt.ForbiddenPlugins.value()) {
+     Conf.addForbiddenPlugins(Name);
+   }
++  for (const auto &ImageDir : Opt.ImageDir.value()) {
++    Conf.getStatisticsConfigure().setImageDir(ImageDir);
++    break;
++  }
+ 
+   Conf.addHostRegistration(HostRegistration::Wasi);
+   const auto InputPath =

@@ -1,0 +1,13 @@
+diff --git a/lib/executor/engine/variableInstr.cpp b/lib/executor/engine/variableInstr.cpp
+index f57ee4fe..3af5623c 100644
+--- a/lib/executor/engine/variableInstr.cpp
++++ b/lib/executor/engine/variableInstr.cpp
+@@ -10,7 +10,7 @@ namespace Executor {
+ 
+ Expect<void> Executor::runLocalGetOp(Runtime::StackManager &StackMgr,
+                                      uint32_t StackOffset) const noexcept {
+-  StackMgr.push(StackMgr.getTopN(StackOffset));
++   StackMgr.push(StackMgr.getTopN(StackOffset));
+   return {};
+ }
+ 

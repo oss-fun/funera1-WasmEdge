@@ -1,0 +1,12 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 311c2220..880833ad 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -70,6 +70,7 @@ option(WASMEDGE_PLUGIN_IMAGE "Enable WasmEdge image plugin." OFF)
+ option(WASMEDGE_PLUGIN_TENSORFLOW "Enable WasmEdge TensorFlow plugin." OFF)
+ option(WASMEDGE_PLUGIN_TENSORFLOWLITE "Enable WasmEdge TensorFlow-Lite plugin." OFF)
+ 
++
+ if(WASMEDGE_BUILD_TOOLS AND WASMEDGE_BUILD_FUZZING)
+   message(FATAL_ERROR "wasmedge tool and fuzzing tool are exclusive options.")
+ endif()
