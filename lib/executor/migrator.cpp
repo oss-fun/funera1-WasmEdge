@@ -66,66 +66,76 @@ namespace Executor {
   }
 
   // TODO: リファクタしたほうが良さそう
-  std::vector<uint8_t> M::getTypeStack(uint32_t FuncIdx, uint32_t Offset, bool IsRetAddr) {
-    uint8_t Val;
-    std::ifstream type_table(TYPE_TABLE, std::ios::binary);
-    std::ifstream tablemap_func(TYPE_TABLEMAP_FUNC, std::ios::binary);
-    std::ifstream tablemap_offset(TYPE_TABLEMAP_OFFSET, std::ios::binary);
+  // std::vector<uint8_t> M::getTypeStack(uint32_t FuncIdx, uint32_t Offset, bool IsRetAddr) {
+  //   uint8_t Val;
+  //   std::ifstream type_table(TYPE_TABLE, std::ios::binary);
+  //   std::ifstream tablemap_func(TYPE_TABLEMAP_FUNC, std::ios::binary);
+  //   std::ifstream tablemap_offset(TYPE_TABLEMAP_OFFSET, std::ios::binary);
 
-    /// tablemap_func
-    uint32_t _FuncIdx;
-    uint64_t TablemapOffsetAddr;
-    tablemap_func.seekg(3*sizeof(uint32_t)*FuncIdx, std::ios_base::beg);
-    tablemap_func.read(reinterpret_cast<char *>(&_FuncIdx), sizeof(uint32_t));
-    tablemap_func.read(reinterpret_cast<char *>(&TablemapOffsetAddr), sizeof(uint64_t));
+  //   /// tablemap_func
+  //   uint32_t _FuncIdx;
+  //   uint64_t TablemapOffsetAddr;
+  //   tablemap_func.seekg(3*sizeof(uint32_t)*FuncIdx, std::ios_base::beg);
+  //   tablemap_func.read(reinterpret_cast<char *>(&_FuncIdx), sizeof(uint32_t));
+  //   tablemap_func.read(reinterpret_cast<char *>(&TablemapOffsetAddr), sizeof(uint64_t));
 
-    tablemap_func.close();
+  //   tablemap_func.close();
 
-    /// tablemap_offset
-    std::vector<uint8_t> TypeStack(0);
-    uint32_t LocalsSize;
-    tablemap_offset.seekg(TablemapOffsetAddr, std::ios_base::beg);
-    // 関数FuncIdxのローカルを取得
-    tablemap_offset.read(reinterpret_cast<char *>(&LocalsSize), sizeof(uint32_t));
-    for (uint32_t I = 0; I < LocalsSize; ++I) {
-      tablemap_offset.read(reinterpret_cast<char *>(&Val), sizeof(uint8_t));
-      TypeStack.push_back(Val);
+  //   /// tablemap_offset
+  //   std::vector<uint8_t> TypeStack(0);
+  //   uint32_t LocalsSize;
+  //   tablemap_offset.seekg(TablemapOffsetAddr, std::ios_base::beg);
+  //   // 関数FuncIdxのローカルを取得
+  //   tablemap_offset.read(reinterpret_cast<char *>(&LocalsSize), sizeof(uint32_t));
+  //   for (uint32_t I = 0; I < LocalsSize; ++I) {
+  //     tablemap_offset.read(reinterpret_cast<char *>(&Val), sizeof(uint8_t));
+  //     TypeStack.push_back(Val);
+  //   }
+  //   // Offsetの位置まで移動
+  //   uint32_t _Offset;
+  //   uint64_t TypeTableAddr;
+  //   // uint64_t PreTypeTableAddr;
+  //   while(1) {
+  //     tablemap_offset.read(reinterpret_cast<char *>(&_Offset), sizeof(uint32_t));
+  //     // eofならbreak
+  //     if (tablemap_offset.eof()) break;
+
+  //     tablemap_offset.read(reinterpret_cast<char *>(&TypeTableAddr), sizeof(uint64_t));
+  //     if (Offset == _Offset) break;
+  //   }
+
+  //   tablemap_offset.close();
+
+  //   /// type_table
+  //   type_table.seekg(TypeTableAddr, std::ios_base::beg);
+  //   uint32_t StackSize;
+  //   type_table.read(reinterpret_cast<char *>(&StackSize), sizeof(uint32_t));
+  //   // リターンアドレスの場合、つまり関数呼び出し途中のときの場合、それ用のスタックを取得する
+  //   if (IsRetAddr) {
+  //     type_table.seekg(StackSize, std::ios_base::cur);
+  //     type_table.read(reinterpret_cast<char *>(&StackSize), sizeof(uint32_t));
+  //   }
+  //   for (uint32_t I = 0; I < StackSize; ++I) {
+  //     type_table.read(reinterpret_cast<char *>(&Val), sizeof(uint8_t));
+  //     TypeStack.push_back(Val);
+  //   }
+
+  //   type_table.close();
+
+  //   // debug
+  //   // std::cerr << "[DEBUG]LocalsSize: " << LocalsSize << std::endl;
+  //   // std::cerr << "[DEBUG]StackSize: " << StackSize << std::endl;
+
+  //   return TypeStack;
+  // }
+  
+  std::vector<uint8_t> M::getTypeStack_v2(uint32_t FuncIdx, uint32_t Offset) {
+    StackTable table = get_stack_table(FuncIdx, Offset);
+    std::vector<uint8_t> TypeStack(table.size);
+    for (size_t i = 0; i < table.size; i++) {
+      StackTableEntry entry = table.data[i];
+      TypeStack[i] = entry.ty;
     }
-    // Offsetの位置まで移動
-    uint32_t _Offset;
-    uint64_t TypeTableAddr;
-    // uint64_t PreTypeTableAddr;
-    while(1) {
-      tablemap_offset.read(reinterpret_cast<char *>(&_Offset), sizeof(uint32_t));
-      // eofならbreak
-      if (tablemap_offset.eof()) break;
-
-      tablemap_offset.read(reinterpret_cast<char *>(&TypeTableAddr), sizeof(uint64_t));
-      if (Offset == _Offset) break;
-    }
-
-    tablemap_offset.close();
-
-    /// type_table
-    type_table.seekg(TypeTableAddr, std::ios_base::beg);
-    uint32_t StackSize;
-    type_table.read(reinterpret_cast<char *>(&StackSize), sizeof(uint32_t));
-    // リターンアドレスの場合、つまり関数呼び出し途中のときの場合、それ用のスタックを取得する
-    if (IsRetAddr) {
-      type_table.seekg(StackSize, std::ios_base::cur);
-      type_table.read(reinterpret_cast<char *>(&StackSize), sizeof(uint32_t));
-    }
-    for (uint32_t I = 0; I < StackSize; ++I) {
-      type_table.read(reinterpret_cast<char *>(&Val), sizeof(uint8_t));
-      TypeStack.push_back(Val);
-    }
-
-    type_table.close();
-
-    // debug
-    // std::cerr << "[DEBUG]LocalsSize: " << LocalsSize << std::endl;
-    // std::cerr << "[DEBUG]StackSize: " << StackSize << std::endl;
-
     return TypeStack;
   }
 
@@ -353,13 +363,8 @@ namespace Executor {
     std::vector<Runtime::StackManager::Frame> FrameStack = StackMgr.getFrameStack();
     std::vector<ValVariant> ValueStack = StackMgr.getValueStack();
     std::vector<std::vector<uint8_t>> TypeStacks(FrameStack.size());
-    std::ofstream frame_fout(ImageDir + "frame.img", std::ios::trunc | std::ios::binary);
-
-    // header file. frame stackのサイズを記録
-    // uint32_t LenFrame = FrameStack.size()-1;
-    // frame_fout.write(reinterpret_cast<char *>(&LenFrame), sizeof(uint32_t));
-    // frame_fout.close();
     size_t LenFrame = FrameStack.size()-1;
+    spdlog::info("FrameStack size: {}", LenFrame);
     
     // 先にフレームごとの型スタックを取得し、TypeStacksにつめる
     AST::InstrView::iterator PCCopy = PC;
@@ -367,12 +372,18 @@ namespace Executor {
     for (size_t I = FrameStack.size()-1; I > 0; --I, ++StackIdx) {
       auto f = FrameStack[I];
       const Runtime::Instance::ModuleInstance* ModInst = f.Module;
+      spdlog::info("f.Module");
       // NOTE: リターンアドレスは、実行しているアドレスの1つまえのアドレスを持っているので+1する
-      if (I != FrameStack.size() - 1) PCCopy++;
+      // if (I != FrameStack.size() - 1) PCCopy++;
+      // spdlog::info("PCCopy++");
       auto [FuncIdx, Offset] = getInstrAddrExpr(ModInst, PCCopy);
-      TypeStacks[StackIdx] = getTypeStack(FuncIdx, Offset, I != FrameStack.size()-1);
+      spdlog::info("FuncIdx: {}, Offset: {}", FuncIdx, Offset);
+      // TypeStacks[StackIdx] = getTypeStack(FuncIdx, Offset, I != FrameStack.size()-1);
+      TypeStacks[StackIdx] = getTypeStack_v2(FuncIdx, Offset);
+      spdlog::info("getTypeStack");
       PCCopy = f.From;
     }
+    spdlog::info("OK getTypeStack");
 
     // TypeStackからWAMRのセルの個数累積和みたいにする
     // 累積和 1-indexed
@@ -385,8 +396,10 @@ namespace Executor {
           Cur++;
       }
     }
+    spdlog::info("OK WamrCellSums");
 
     BaseCallStackEntry entries[LenFrame];
+    auto _PC = PC;
     for (size_t I = FrameStack.size()-1; I > 0; --I) {
     // for (size_t I = 1; I < LenFrame; I++) {
       Runtime::StackManager::Frame f = FrameStack[I];
@@ -401,11 +414,13 @@ namespace Executor {
       }
 
       // PCのアドレスを取得
-      auto [CurFidx, CurOffset] = getInstrAddrExpr(ModInst, PC);
+      // _PC = (I == FrameStack.size() - 1) ? _PC : _PC-1;
+      auto [CurFidx, CurOffset] = getInstrAddrExpr(ModInst, _PC);
       CodePos pc = {
         .fidx = CurFidx,
         .offset = CurOffset,
       };
+      spdlog::info("{}th frame: PC = ({}, {})", I, pc.fidx, pc.offset);
 
       // ローカル/スタック
       uint32_t StackBottom = f.VPos - f.Locals;
@@ -419,12 +434,12 @@ namespace Executor {
         exit(1);
       }
       Runtime::Instance::FunctionInstance* FuncInst = Res.value();
-      std::vector<struct CtrlInfo> CtrlStack = getCtrlStack(PC, FuncInst, WamrCellSums);
-      _dumpStack(*this, f, PC, LocalsPtr, ValueStackPtr, CtrlStack, entries[I-1]);
+      std::vector<struct CtrlInfo> CtrlStack = getCtrlStack(_PC, FuncInst, WamrCellSums);
+      _dumpStack(*this, f, _PC, LocalsPtr, ValueStackPtr, CtrlStack, entries[I-1]);
       spdlog::info("OK _dumpStack");
 
       // 各値を更新
-      PC = f.From;
+      _PC = f.From;
 
       // debug
       // debugFrame(I, pc.fidx, f.Locals, f.Arity, f.VPos);
@@ -503,71 +518,101 @@ namespace Executor {
     auto Res = _restorePC(ModInst, pc.fidx, pc.offset);
     return Res;
   }
+  
+  void appendConverted(Runtime::StackManager& StackMgr, TypedArray array) {
+    size_t iter = 0;
+    for (size_t I = 0; I < array.types.size; I++) {
+      uint8_t type = array.types.contents[I];
+      switch (type) {
+        case 1: // S32
+          {
+            StackMgr.push(array.values.contents[iter++]);
+            break;
+          }
+        case 2: // S64
+          {
+            int32_t high = array.values.contents[iter++];
+            int32_t low = array.values.contents[iter++];
+            int64_t val64 = ((int64_t)high << 32) | low;
+            StackMgr.push(val64);
+            break;
+          }
+        case 8: // S128
+          {
+            std::cerr << "V128 is not supported" << std::endl;
+            exit(1);
+          }
+        default:
+          {
+            std::cerr << "Unknown type" << std::endl;
+            exit(1);
+          }
+      }
+    }
+    return;
+  }
 
   Expect<void> M::restoreStack(Runtime::StackManager& StackMgr) {
     const Runtime::Instance::ModuleInstance *Module = StackMgr.getModule();
+    
+    // restore stack
+    CallStack cs = restore_stack();
+    print_call_stack(&cs);
+    
 
-    uint32_t LenFrame;
-    std::ifstream ifs(ImageDir + "frame.img", std::ios::binary);
-    ifs.read(reinterpret_cast<char *>(&LenFrame), sizeof(uint32_t));
-    ifs.close();
+    uint32_t LenFrame = cs.size;
+    // std::ifstream ifs(ImageDir + "frame.img", std::ios::binary);
+    // ifs.read(reinterpret_cast<char *>(&LenFrame), sizeof(uint32_t));
+    // ifs.close();
 
+
+    AST::InstrView::iterator PC, From;
     // LenFrame-1から始まるのは、Stack{LenFrame}.imgがダミーフレームだから
-    AST::InstrView::iterator PC = StackMgr.popFrame();
-    for (size_t I = LenFrame; I > 0; --I) {
-      ifs.open(ImageDir + "stack" + std::to_string(I) + ".img", std::ios::binary);
+    From = StackMgr.popFrame();
+    // for (size_t I = LenFrame; I > 0; --I) {
+    for (size_t I = 0; I < LenFrame; ++I) {
+      CallStackEntry entry = cs.entries[I];
+      spdlog::info("{}th pc = ({}, {})", I, entry.pc.fidx, entry.pc.offset);
+      // ifs.open(ImageDir + "stack" + std::to_string(I) + ".img", std::ios::binary);
 
       // 関数インデックスのロード
-      uint32_t EnterFuncIdx;
-      ifs.read(reinterpret_cast<char *>(&EnterFuncIdx), sizeof(uint32_t));
+      // uint32_t EnterFuncIdx;
+      // ifs.read(reinterpret_cast<char *>(&EnterFuncIdx), sizeof(uint32_t));
       
-      // リターンアドレスのロード
-      uint32_t FuncIdx, Offset;
-      ifs.read(reinterpret_cast<char *>(&FuncIdx), sizeof(uint32_t));
-      ifs.read(reinterpret_cast<char *>(&Offset), sizeof(uint32_t));
-      // リターンアドレスの復元
-      auto ResFrom = _restorePC(Module, FuncIdx, Offset);
-      if (!ResFrom) {
-        return Unexpect(ResFrom);
-      }
-      AST::InstrView::iterator From = ResFrom.value()-1;
-      if (I == LenFrame) From = PC; // 一番bottomのフレームのリターンアドレスはWasmEdge特有なので、それを使う
+        auto ResPC = _restorePC(Module, entry.pc.fidx, entry.pc.offset);
+        if (!ResPC) {
+          return Unexpect(ResPC);
+        }
+        PC = ResPC.value();
+        // リターンアドレスは1つ前のアドレスを持っているので-1する
+        // if (I < LenFrame) PC--;
 
-      // ローカルと返り値の数
-      auto ResFunc = Module->getFunc(EnterFuncIdx);
-      if (!ResFunc) {
-        return Unexpect(ResFunc);
-      }
-      const Runtime::Instance::FunctionInstance* Func = ResFunc.value();
-      const auto &FuncType = Func->getFuncType();
-      const uint32_t ArgsN = static_cast<uint32_t>(FuncType.getParamTypes().size());
-      const uint32_t RetsN =
-          static_cast<uint32_t>(FuncType.getReturnTypes().size());
+        // ローカルと返り値の数
+        auto ResFunc = Module->getFunc(entry.pc.fidx);
+        if (!ResFunc) {
+          return Unexpect(ResFunc);
+        }
+        const Runtime::Instance::FunctionInstance* Func = ResFunc.value();
+        const auto &FuncType = Func->getFuncType();
+        const uint32_t ArgsN = static_cast<uint32_t>(FuncType.getParamTypes().size());
+        const uint32_t RetsN =
+            static_cast<uint32_t>(FuncType.getReturnTypes().size());
 
-      // TODO: Localsに対応する値をenterFunctionと対応してるか確認する
-      uint32_t Locals = ArgsN + Func->getLocalNum();
-      uint32_t VPos = StackMgr.size() + Locals;
+        // TODO: Localsに対応する値をenterFunctionと対応してるか確認する
+        uint32_t Locals = ArgsN + Func->getLocalNum();
+        uint32_t VPos = StackMgr.size() + Locals;
 
+      // if (I == 0) From = PC; // 一番bottomのフレームのリターンアドレスはWasmEdge特有なので、それを使う
+      // 先頭フレームはフレームスタックに入っていないのでpushしない
       StackMgr._pushFrame(Module, From, Locals, RetsN, VPos, false);
-
-      // 型スタック
-      uint32_t TspOfs;
-      std::vector<uint8_t> TypeStack;
-      ifs.read(reinterpret_cast<char *>(&TspOfs), sizeof(uint32_t));
-      for (uint32_t I = 0; I < TspOfs; I++) {
-        uint8_t type;
-        ifs.read(reinterpret_cast<char *>(&type), sizeof(uint8_t));
-        TypeStack.push_back(type);
-      }
+      // if (I < LenFrame-1) {
+      // }
 
       // 値スタック
-      for (uint32_t I = 0; I < TspOfs; I++) {
-        ValVariant Value;
-        ifs.read(reinterpret_cast<char *>(&Value), sizeof(uint32_t) * TypeStack[I]);
-        StackMgr.push(Value);
-      }
+      appendConverted(StackMgr, entry.locals);
+      appendConverted(StackMgr, entry.value_stack);
 
-      ifs.close();
+      From = PC;
 
       // debug
       // debugFrame(I, EnterFuncIdx, Locals, RetsN, VPos);
