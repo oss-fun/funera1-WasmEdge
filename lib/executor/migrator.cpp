@@ -222,7 +222,13 @@ namespace Executor {
   /// Dump functions
   /// ================
   void M::dumpMemory(const Runtime::Instance::ModuleInstance* ModInst) {
-    ModInst->dumpMemInst(ImageDir);
+    const uint32_t WASM_PAGE_SIZE = 65536;
+    Expect<Runtime::Instance::MemoryInstance *> Res = ModInst->getMemory(0);
+    Runtime::Instance::MemoryInstance *MemInst = Res.value();
+    uint32_t page_size = MemInst->getPageSize();
+    auto Res2 = MemInst->getBytes(0, page_size * WASM_PAGE_SIZE);
+    Span<Byte> data = Res2.value();
+    checkpoint_memory(data.data(), page_size);
   }
 
   void M::dumpGlobal(const Runtime::Instance::ModuleInstance* ModInst) {
@@ -452,7 +458,25 @@ namespace Executor {
   /// Restore functions
   /// ================
   void M::restoreMemory(const Runtime::Instance::ModuleInstance* ModInst) {
-    ModInst->restoreMemInst(ImageDir);
+    // ModInst->restoreMemInst(ImageDir);
+    Array8 data = restore_memory();
+    if (data.size == 0) {
+      std::cerr << "ERROR: restore_memory" << std::endl;
+      exit(1);
+    }
+
+    auto Res = ModInst->getMemory(0);
+    Runtime::Instance::MemoryInstance *MemInst = Res.value();
+    uint32_t old_page_size = MemInst->getPageSize();
+    uint32_t new_page_size = data.size / 65536;
+
+    MemInst->growPage(new_page_size- old_page_size);
+    Span<const Byte> SpanData(data.contents, data.size);
+    auto Res2 = MemInst->setBytes(SpanData, 0, 0, data.size);
+    if (!Res2) {
+      std::cerr << "ERROR: restore_memory" << std::endl;
+      exit(1);
+    }
   }
 
   void M::restoreGlobal(const Runtime::Instance::ModuleInstance* ModInst) {
