@@ -115,6 +115,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       std::cerr << "global, " << getTime(ts1, ts2) << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
+      // NOTE: 復元したPCから1進めないと、次の命令から始まらないので+1
       StartIt = Res.value();
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "program counter, " << getTime(ts1, ts2) << std::endl;
@@ -140,9 +141,11 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       // Migr.dumpProgramCounter(StackMgr.getModule(), StartIt);
       // std::cerr << "Success dumpIter" << std::endl;
 
-      // Migr.dumpStack(StackMgr, StartIt);
-      // std::cerr << "Success dumpStack" << std::endl;
+      Migr.dumpStack(StackMgr, StartIt);
+      std::cerr << "Success dumpStack" << std::endl;
 
+      // NOTE: 復元したPCから1進めないと、次の命令から始まらないので+1
+      StartIt++;
       RestoreFlag = false;
     }
 
@@ -2259,6 +2262,15 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       }
     }
 
+    // OpCode Code = PC->getOpCode();
+    // std::cout << "[DEBUG]OpCode: 0x" << std::hex << (uint16_t)Code << std::dec << std::endl;
+    if (auto Res = Dispatch(); !Res) {
+      // SourceLoc PCSourceLoc = Migr.getSourceLoc(PC);
+      // std::cout << "[WASMEDGE ERROR] PC is " << PCSourceLoc.FuncIdx << " " << PCSourceLoc.Offset << std::endl;
+      // InteractiveMode(breakpoint, PCSourceLoc, StackMgr);
+      return Unexpect(Res);
+    }
+
     /* NOTE
         DumpFlag: checkpointシグナルを受け取ったときに1が代入される。受け取るまでは0が入る。
         isDumpMode: --no-checkpointオプションがない場合に1、ある場合に0が入る 
@@ -2299,16 +2311,6 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       // 
       exit(1);
       return {};
-    }
-
-
-    // OpCode Code = PC->getOpCode();
-    // std::cout << "[DEBUG]OpCode: 0x" << std::hex << (uint16_t)Code << std::dec << std::endl;
-    if (auto Res = Dispatch(); !Res) {
-      // SourceLoc PCSourceLoc = Migr.getSourceLoc(PC);
-      // std::cout << "[WASMEDGE ERROR] PC is " << PCSourceLoc.FuncIdx << " " << PCSourceLoc.Offset << std::endl;
-      // InteractiveMode(breakpoint, PCSourceLoc, StackMgr);
-      return Unexpect(Res);
     }
 
     PC++;
