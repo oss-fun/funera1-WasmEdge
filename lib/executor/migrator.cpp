@@ -5,6 +5,8 @@
 #include <string>
 #include <cassert>
 #include <wasmig/migration.h>
+#include <wasmig/stack_tables.h>
+#include <wasmig/state.h>
 
 namespace WasmEdge {
   
@@ -217,11 +219,134 @@ namespace Executor {
     ModInst->dumpGlobInst(ImageDir);
   }
 
-
   Expect<void> M::dumpProgramCounter(const Runtime::Instance::ModuleInstance* ModInst, AST::InstrView::iterator Iter) {
     auto [FuncIdx, Offset] = getInstrAddrExpr(ModInst, Iter);
     checkpoint_pc(FuncIdx, Offset);
     return {};
+  }
+  
+  void appendConverted(std::vector<uint32_t>& array, uint8_t type, const ValVariant Val) {
+      switch (type) {
+        case 1: // S32
+          {
+            array.push_back(Val.get<uint32_t>());
+            break;
+          }
+        case 2: // S64
+          {
+            int64_t val64 = Val.get<int64_t>();
+            int32_t high = val64 & 0xFFFFFFFF;
+            int32_t low = (val64 >> 32) & 0xFFFFFFFF;
+            array.push_back(high);
+            array.push_back(low);
+            break;
+          }
+        case 8: // S128
+          {
+            std::cerr << "V128 is not supported" << std::endl;
+            exit(1);
+          }
+        default:
+          {
+            std::cerr << "Unknown type" << std::endl;
+            exit(1);
+          }
+      }
+  }
+  
+  Array32 ToArray32(Array8 types, std::vector<ValVariant> Vec) {
+    std::vector<uint32_t> array;;
+    for (size_t i = 0; i < types.size; i++) {
+      uint8_t type = types.contents[i];
+      appendConverted(array, type, Vec[i]);
+    }
+    return Array32 {
+      .size = (uint32_t)array.size(),
+      .contents = array.data(),
+    };
+  }
+  
+  void _dumpStack(
+    Migrator &M,
+    Runtime::StackManager::Frame f,
+    AST::InstrView::iterator PC, 
+    ValVariant* LocalsPtr,
+    ValVariant* ValueStackPtr,
+    std::vector<struct Migrator::CtrlInfo> &LabelStack,
+    BaseCallStackEntry& entry
+  ) {
+    const Runtime::Instance::ModuleInstance* ModInst = f.Module;
+    if (LocalsPtr == nullptr || ValueStackPtr == nullptr) {
+      std::cerr << "LocalsPtr or ValueStackPtr is nullptr" << std::endl;
+      exit(1);
+    }
+    
+    // pc
+    auto [FuncIdx, Offset] = M.getInstrAddrExpr(ModInst, PC);
+    entry.pc = CodePos{
+      .fidx = FuncIdx,
+      .offset = Offset,
+    };
+    spdlog::info("_dumpStack: Set pc to ({}, {})", FuncIdx, Offset);
+    
+    // locals
+    // TODO: slot-sizeが128bit単位のstackから32bit単位のstackに変換する
+    ValVariant* lp = LocalsPtr;
+    Array8 local_types = get_local_types(FuncIdx);
+    std::vector<uint32_t> locals_vec;
+    for (size_t i = 0; i < local_types.size; i++) {
+      uint8_t type = local_types.contents[i];
+      appendConverted(locals_vec, type, lp[i]);
+    }
+    // mallocしないとエラーでる.
+    // TODO: memcpyを回避する. 現在二重で値のコピーが発生していて無駄
+    uint32_t* locals_buf = (uint32_t *)malloc(locals_vec.size() * sizeof(uint32_t));
+    memcpy(locals_buf, locals_vec.data(), locals_vec.size() * sizeof(uint32_t));
+    entry.locals = {
+      .size = (uint32_t)locals_vec.size(),
+      .contents = locals_buf,
+    };
+    spdlog::info("_dumpStack: Set locals");
+
+    // stack
+    ValVariant* sp = ValueStackPtr;
+    StackTable stack_table = get_stack_table(FuncIdx, Offset);
+    std::vector<uint32_t> stack_vec;
+    for (size_t i = 0; i < stack_table.size; i++) {
+      StackTableEntry entry = stack_table.data[i];
+      appendConverted(stack_vec, entry.ty, sp[i]);
+    }
+    uint32_t* stack_buf = (uint32_t *)malloc(stack_vec.size() * sizeof(uint32_t));
+    memcpy(stack_buf, stack_vec.data(), stack_vec.size() * sizeof(uint32_t));
+    entry.value_stack = {
+      .size = (uint32_t)stack_vec.size(),
+      .contents = stack_buf,
+    };
+    spdlog::info("_dumpStack: Set stack");
+
+    /// label stack
+    uint32_t label_stack_size = LabelStack.size();
+    uint32_t* begins = (uint32_t *)malloc(label_stack_size * sizeof(uint32_t));
+    uint32_t* targets = (uint32_t *)malloc(label_stack_size* sizeof(uint32_t));
+    uint32_t* stack_pointers = (uint32_t *)malloc(label_stack_size * sizeof(uint32_t));
+    uint32_t* cell_nums = (uint32_t *)malloc(label_stack_size * sizeof(uint32_t));
+    for (size_t i = 0; i < LabelStack.size(); i++) {
+        Migrator::CtrlInfo ci = LabelStack[i];
+        begins[i] = ci.BeginAddrOfs;
+        targets[i] = ci.TargetAddrOfs;
+        stack_pointers[i] = ci.SpOfs;
+        cell_nums[i] = ci.ResultCells;
+    }
+    entry.label_stack = {
+      .size = label_stack_size,
+      .begins = begins,
+      .targets = targets,
+      .stack_pointers = stack_pointers,
+      .cell_nums = cell_nums,
+    };
+    spdlog::info("_dumpStack: Set label stack");
+    
+    return;
   }
 
   void M::dumpStack(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC) {
@@ -231,9 +356,10 @@ namespace Executor {
     std::ofstream frame_fout(ImageDir + "frame.img", std::ios::trunc | std::ios::binary);
 
     // header file. frame stackのサイズを記録
-    uint32_t LenFrame = FrameStack.size()-1;
-    frame_fout.write(reinterpret_cast<char *>(&LenFrame), sizeof(uint32_t));
-    frame_fout.close();
+    // uint32_t LenFrame = FrameStack.size()-1;
+    // frame_fout.write(reinterpret_cast<char *>(&LenFrame), sizeof(uint32_t));
+    // frame_fout.close();
+    size_t LenFrame = FrameStack.size()-1;
     
     // 先にフレームごとの型スタックを取得し、TypeStacksにつめる
     AST::InstrView::iterator PCCopy = PC;
@@ -260,10 +386,9 @@ namespace Executor {
       }
     }
 
-    // フレームスタックを上から見ていく。上からstack1, stack2...とする
-    StackIdx = 1;
-    for (size_t I = FrameStack.size()-1; I > 0; --I, ++StackIdx) {
-      std::ofstream ofs(ImageDir + "stack" + std::to_string(StackIdx) + ".img", std::ios::trunc | std::ios::binary);
+    BaseCallStackEntry entries[LenFrame];
+    for (size_t I = FrameStack.size()-1; I > 0; --I) {
+    // for (size_t I = 1; I < LenFrame; I++) {
       Runtime::StackManager::Frame f = FrameStack[I];
  
       // ModuleInstance 
@@ -275,57 +400,37 @@ namespace Executor {
         exit(1);
       }
 
-      // 関数インデックス
-      // uint32_t EnterFuncIdx = getFuncIdx(f.EnterFunc);
-      uint32_t EnterFuncIdx = getFuncIdx(PC);
-      ofs.write(reinterpret_cast<char *>(&EnterFuncIdx), sizeof(uint32_t));
+      // PCのアドレスを取得
+      auto [CurFidx, CurOffset] = getInstrAddrExpr(ModInst, PC);
+      CodePos pc = {
+        .fidx = CurFidx,
+        .offset = CurOffset,
+      };
 
-      // リターンアドレス(uint32 fidx, uint32 offset)
-      // NOTE: 共通仕様ではリターンアドレスは次に実行するアドレスなのでf.From+1
-      // I==1のときだけ, f.Fromにend()が入ってるので場合分け
-      AST::InstrView::iterator From = (I == 1 ? f.From : f.From+1);
-      auto [FuncIdx, Offset] = getInstrAddrExpr(ModInst, From);
-      ofs.write(reinterpret_cast<char *>(&FuncIdx), sizeof(uint32_t));
-      ofs.write(reinterpret_cast<char *>(&Offset), sizeof(uint32_t));
-
-      // 型スタック
+      // ローカル/スタック
       uint32_t StackBottom = f.VPos - f.Locals;
-      std::vector<uint8_t> TypeStack = TypeStacks[StackIdx];
-      uint32_t TypeStackLen = TypeStack.size();
-      ofs.write(reinterpret_cast<char *>(&TypeStackLen), sizeof(uint32_t));
-      ofs.write(reinterpret_cast<char *>(TypeStack.data()), sizeof(uint8_t) * TypeStackLen);
-
-      // 値スタック
-      for (uint32_t I = 0; I < TypeStackLen; I++) {
-        ofs.write(reinterpret_cast<char *>(&ValueStack[StackBottom+I].get<uint128_t>()), sizeof(uint32_t) * TypeStack[I]);
-      }
+      ValVariant*LocalsPtr = ValueStack.data() + StackBottom;
+      ValVariant* ValueStackPtr = ValueStack.data() + StackBottom + f.Locals;
 
       // ラベルスタック
-      auto Res = ModInst->getFunc(EnterFuncIdx);
+      auto Res = ModInst->getFunc(pc.fidx);
       if (!Res) {
         std::cerr << "FuncIdx isn't correct" << std::endl; 
         exit(1);
       }
       Runtime::Instance::FunctionInstance* FuncInst = Res.value();
       std::vector<struct CtrlInfo> CtrlStack = getCtrlStack(PC, FuncInst, WamrCellSums);
-      uint32_t LenCs = CtrlStack.size();
-      ofs.write(reinterpret_cast<char *>(&LenCs), sizeof(uint32_t));
-      for (uint32_t I = 0; I < LenCs; I++) {
-        struct CtrlInfo ci = CtrlStack[I];
-        ofs.write(reinterpret_cast<char *>(&ci.BeginAddrOfs), sizeof(uint32_t));
-        ofs.write(reinterpret_cast<char *>(&ci.TargetAddrOfs), sizeof(uint32_t));
-        ofs.write(reinterpret_cast<char *>(&ci.SpOfs), sizeof(uint32_t));
-        ofs.write(reinterpret_cast<char *>(&ci.ResultCells), sizeof(uint32_t));
-      }
-
-      ofs.close();
+      _dumpStack(*this, f, PC, LocalsPtr, ValueStackPtr, CtrlStack, entries[I-1]);
+      spdlog::info("OK _dumpStack");
 
       // 各値を更新
       PC = f.From;
 
       // debug
-      // debugFrame(I, EnterFuncIdx, f.Locals, f.Arity, f.VPos);
+      // debugFrame(I, pc.fidx, f.Locals, f.Arity, f.VPos);
     }
+    
+    checkpoint_stack_v3(LenFrame, entries);
   }
   
   /// ================
