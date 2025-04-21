@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <cassert>
+#include <wasmig/migration.h>
 
 namespace WasmEdge {
   
@@ -218,16 +219,8 @@ namespace Executor {
 
 
   Expect<void> M::dumpProgramCounter(const Runtime::Instance::ModuleInstance* ModInst, AST::InstrView::iterator Iter) {
-    std::ofstream ofs(ImageDir + "program_counter.img", std::ios::trunc | std::ios::binary);
-    if (!ofs) {
-      return Unexpect(ErrCode::Value::IllegalPath);
-    }
-
     auto [FuncIdx, Offset] = getInstrAddrExpr(ModInst, Iter);
-    ofs.write(reinterpret_cast<char *>(&FuncIdx), sizeof(uint32_t));
-    ofs.write(reinterpret_cast<char *>(&Offset), sizeof(uint32_t));
-
-    ofs.close();
+    checkpoint_pc(FuncIdx, Offset);
     return {};
   }
 
@@ -401,15 +394,8 @@ namespace Executor {
   }
 
   Expect<AST::InstrView::iterator> M::restoreProgramCounter(const Runtime::Instance::ModuleInstance* ModInst) {
-    std::ifstream ifs(ImageDir + "program_counter.img", std::ios::binary);
-
-    uint32_t FuncIdx, Offset;
-    ifs.read(reinterpret_cast<char *>(&FuncIdx), sizeof(uint32_t));
-    ifs.read(reinterpret_cast<char *>(&Offset), sizeof(uint32_t));
-
-    ifs.close();
-
-    auto Res = _restorePC(ModInst, FuncIdx, Offset);
+    CodePos pc = restore_pc();
+    auto Res = _restorePC(ModInst, pc.fidx, pc.offset);
     return Res;
   }
 
