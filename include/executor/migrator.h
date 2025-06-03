@@ -97,9 +97,9 @@ public:
   // TODO: リファクタしたほうが良さそう
   std::vector<uint8_t> getTypeStack(uint32_t FuncIdx, uint32_t Offset, bool IsRetAddr) {
     uint8_t Val;
-    std::ifstream type_table(TYPE_TABLE, std::ios::binary);
-    std::ifstream tablemap_func(TYPE_TABLEMAP_FUNC, std::ios::binary);
-    std::ifstream tablemap_offset(TYPE_TABLEMAP_OFFSET, std::ios::binary);
+    std::ifstream type_table(ImageDir + TYPE_TABLE, std::ios::binary);
+    std::ifstream tablemap_func(ImageDir + TYPE_TABLEMAP_FUNC, std::ios::binary);
+    std::ifstream tablemap_offset(ImageDir + TYPE_TABLEMAP_OFFSET, std::ios::binary);
 
     /// tablemap_func
     uint32_t _FuncIdx;
@@ -160,9 +160,9 @@ public:
 
   bool isExistTypeStackTable() {
     namespace fs = std::filesystem;
-    return fs::exists(TYPE_TABLE) &&
-           fs::exists(TYPE_TABLEMAP_FUNC) &&
-           fs::exists(TYPE_TABLEMAP_OFFSET);
+    return fs::exists(ImageDir + TYPE_TABLE) &&
+           fs::exists(ImageDir + TYPE_TABLEMAP_FUNC) &&
+           fs::exists(ImageDir + TYPE_TABLEMAP_OFFSET);
   }
 
   /// ================
