@@ -141,9 +141,7 @@ namespace Executor {
 
   bool M::isExistTypeStackTable() {
     namespace fs = std::filesystem;
-    return fs::exists(ImageDir + TYPE_TABLE) &&
-           fs::exists(ImageDir + TYPE_TABLEMAP_FUNC) &&
-           fs::exists(ImageDir + TYPE_TABLEMAP_OFFSET);
+    return fs::exists("stack-table.msgpack");
   }
 
   /// ================
@@ -241,7 +239,7 @@ namespace Executor {
     return {};
   }
   
-  void appendConverted(std::vector<uint32_t>& array, uint8_t type, const ValVariant Val) {
+  void _appendConverted(std::vector<uint32_t>& array, uint8_t type, const ValVariant Val) {
       switch (type) {
         case 1: // S32
           {
@@ -257,14 +255,14 @@ namespace Executor {
             array.push_back(low);
             break;
           }
-        case 8: // S128
+        case 4: // S128
           {
             std::cerr << "V128 is not supported" << std::endl;
             exit(1);
           }
         default:
           {
-            std::cerr << "Unknown type" << std::endl;
+            std::cerr << "Unknown type: " << +type << std::endl;
             exit(1);
           }
       }
@@ -274,7 +272,9 @@ namespace Executor {
     std::vector<uint32_t> array;;
     for (size_t i = 0; i < types.size; i++) {
       uint8_t type = types.contents[i];
-      appendConverted(array, type, Vec[i]);
+      // print what calls _appendConverted
+      std::cerr << "At ToArray32" << std::endl;
+      _appendConverted(array, type, Vec[i]);
     }
     return Array32 {
       .size = (uint32_t)array.size(),
@@ -312,7 +312,9 @@ namespace Executor {
     std::vector<uint32_t> locals_vec;
     for (size_t i = 0; i < local_types.size; i++) {
       uint8_t type = local_types.contents[i];
-      appendConverted(locals_vec, type, lp[i]);
+      // print what calls _appendConverted
+      std::cerr << "At _dumpStack, process that convert locals" << std::endl;
+      _appendConverted(locals_vec, type, lp[i]);
     }
     // mallocしないとエラーでる.
     // TODO: memcpyを回避する. 現在二重で値のコピーが発生していて無駄
@@ -330,7 +332,9 @@ namespace Executor {
     std::vector<uint32_t> stack_vec;
     for (size_t i = 0; i < stack_table.size; i++) {
       StackTableEntry entry = stack_table.data[i];
-      appendConverted(stack_vec, entry.ty, sp[i]);
+      // print what calls _appendConverted
+      std::cerr << "At _dumpStack, process that convert stack" << std::endl;
+      _appendConverted(stack_vec, entry.ty, sp[i]);
     }
     uint32_t* stack_buf = (uint32_t *)malloc(stack_vec.size() * sizeof(uint32_t));
     memcpy(stack_buf, stack_vec.data(), stack_vec.size() * sizeof(uint32_t));
@@ -470,7 +474,15 @@ namespace Executor {
     uint32_t old_page_size = MemInst->getPageSize();
     uint32_t new_page_size = data.size / 65536;
 
-    MemInst->growPage(new_page_size- old_page_size);
+    // grow the page for restore memory
+    bool succeeded_grown = MemInst->growPage(new_page_size- old_page_size);
+    if (!succeeded_grown) {
+      std::cerr << "ERROR: Failed to grow page" << std::endl;
+      // compare between new page size and old page size
+      std::cout << "DEBUG: page size (new, old): " << "(" << new_page_size << ", " << old_page_size << ")" << std::endl;
+      exit(1);
+    }
+
     Span<const Byte> SpanData(data.contents, data.size);
     auto Res2 = MemInst->setBytes(SpanData, 0, 0, data.size);
     if (!Res2) {
@@ -561,14 +573,14 @@ namespace Executor {
             StackMgr.push(val64);
             break;
           }
-        case 8: // S128
+        case 4: // S128
           {
             std::cerr << "V128 is not supported" << std::endl;
             exit(1);
           }
         default:
           {
-            std::cerr << "Unknown type" << std::endl;
+            std::cerr << "Unknown type: " << +type << std::endl;
             exit(1);
           }
       }
@@ -633,8 +645,8 @@ namespace Executor {
       // }
 
       // 値スタック
-      appendConverted(StackMgr, entry.locals);
-      appendConverted(StackMgr, entry.value_stack);
+      std::cerr << "restore locals" << std::endl; appendConverted(StackMgr, entry.locals);
+      std::cerr << "restore stack" << std::endl;  appendConverted(StackMgr, entry.value_stack);
 
       From = PC;
 

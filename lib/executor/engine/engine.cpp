@@ -2278,7 +2278,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
     if (unlikely(DumpFlag&isDumpMode)) {
 
       if (!Migr.isExistTypeStackTable()) {
-        spdlog::error("Not found type stack tables (type_table, type_tablemap_func, type_tablemap_offset)");
+        spdlog::error("Not found the stack-table.msgpack");
         return {};
       }
 
