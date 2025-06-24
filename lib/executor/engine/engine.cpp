@@ -135,7 +135,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       std::cerr << "Success dumpStack" << std::endl;
 
       // NOTE: 復元したPCから1進めないと、次の命令から始まらないので+1
-      StartIt++;
+      // StartIt++;
       RestoreFlag = false;
     }
 
@@ -2261,6 +2261,8 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       return Unexpect(Res);
     }
 
+    PC++;
+
     /* NOTE
         DumpFlag: checkpointシグナルを受け取ったときに1が代入される。受け取るまでは0が入る。
         isDumpMode: --no-checkpointオプションがない場合に1、ある場合に0が入る 
@@ -2302,8 +2304,6 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       exit(1);
       return {};
     }
-
-    PC++;
   }
   return {};
 }
