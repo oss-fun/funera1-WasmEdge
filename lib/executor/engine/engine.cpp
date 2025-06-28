@@ -103,7 +103,12 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       std::cerr << "boot_end, " << getTime(ts1) << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      Migr.restoreMemoryV1(StackMgr.getModule());
+      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+        Migr.restoreMemoryV1(StackMgr.getModule());
+      } else {
+        Migr.restoreMemoryV1(StackMgr.getModule());
+        // Migr.restoreMemoryV2(StackMgr.getModule());
+      }
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "memory, " << getTime(ts1, ts2) << std::endl;
 
@@ -118,7 +123,11 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       std::cerr << "program counter, " << getTime(ts1, ts2) << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      Migr.restoreStack(StackMgr);
+      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+        Migr.restoreStackV1(StackMgr);
+      } else {
+        Migr.restoreStackV2(StackMgr);
+      }
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;
 
@@ -126,10 +135,16 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       // 環境変数AFTER_RESTORE_DUMP=1を設定すると、リストア後にダンプする
       if (auto *env = std::getenv("AFTER_RESTORE_DUMP"); env && std::string(env) == "1") {
         std::cerr << "After restore dump" << std::endl;
-        Migr.dumpMemoryV1(StackMgr.getModule());
+        if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+          Migr.dumpMemoryV1(StackMgr.getModule());
+          Migr.dumpStackV1(StackMgr, StartIt);
+        } else {
+          Migr.dumpMemoryV1(StackMgr.getModule());
+          // Migr.dumpMemoryV2(StackMgr.getModule());
+          Migr.dumpStackV2(StackMgr, StartIt);
+        }
         Migr.dumpGlobal(StackMgr.getModule());
         Migr.dumpProgramCounter(StackMgr.getModule(), StartIt);
-        Migr.dumpStack(StackMgr, StartIt);
       }
 
       RestoreFlag = false;
@@ -2263,10 +2278,14 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       // clock_gettime(CLOCK_MONOTONIC, &t_ts1);
       // For WasmEdge
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      Migr.dumpMemoryV1(StackMgr.getModule());
+      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+        Migr.dumpMemoryV1(StackMgr.getModule());
+      } else {
+        Migr.dumpMemoryV1(StackMgr.getModule());
+        // Migr.dumpMemoryV2(StackMgr.getModule());
+      }
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "memory, " << getTime(ts1, ts2) << std::endl;
-      // std::cerr << "Success dumpMemory" << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpGlobal(StackMgr.getModule());
@@ -2281,7 +2300,11 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       // std::cerr << "Success dumpIter" << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      Migr.dumpStack(StackMgr, PC);
+      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+        Migr.dumpStackV1(StackMgr, PC);
+      } else {
+        Migr.dumpStackV2(StackMgr, PC);
+      }
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;
       // std::cerr << "Success dumpStack" << std::endl;

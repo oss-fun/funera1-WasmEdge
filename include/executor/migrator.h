@@ -57,18 +57,20 @@ public:
                                      Runtime::Instance::FunctionInstance *Func,
                                      const std::vector<uint32_t> &WamrCellSums);
 
-  void dumpMemoryV2(const Runtime::Instance::ModuleInstance* ModInst);
   void dumpMemoryV1(const Runtime::Instance::ModuleInstance* ModInst);
+  void dumpMemoryV2(const Runtime::Instance::ModuleInstance* ModInst);
   void dumpGlobal(const Runtime::Instance::ModuleInstance* ModInst);
   Expect<void> dumpProgramCounter(const Runtime::Instance::ModuleInstance* ModInst,
                                   AST::InstrView::iterator Iter);
-  void dumpStack(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC);
+  void dumpStackV1(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC);
+  void dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC);
 
-  void restoreMemory(const Runtime::Instance::ModuleInstance* ModInst);
   void restoreMemoryV1(const Runtime::Instance::ModuleInstance* ModInst);
+  void restoreMemoryV2(const Runtime::Instance::ModuleInstance* ModInst);
   void restoreGlobal(const Runtime::Instance::ModuleInstance* ModInst);
   Expect<AST::InstrView::iterator> restoreProgramCounter(const Runtime::Instance::ModuleInstance* ModInst);
-  Expect<void> restoreStack(Runtime::StackManager& StackMgr);
+  Expect<void> restoreStackV1(Runtime::StackManager& StackMgr);
+  Expect<void> restoreStackV2(Runtime::StackManager& StackMgr);
 
 private:
   const std::string NULL_MOD_NAME = "null";
