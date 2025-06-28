@@ -655,4 +655,5 @@ namespace Executor {
     }
     return {};
   }
+} // namespace Executor
 } // namespace WasmEdge

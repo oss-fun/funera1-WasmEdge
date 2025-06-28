@@ -41,8 +41,6 @@ Expect<void> Executor::runExpression(Runtime::StackManager &StackMgr,
   return execute(StackMgr, Instrs.begin(), Instrs.end());
 }
 
-static Migrator Migr = Migrator();
-
 Expect<void>
 Executor::runFunction(Runtime::StackManager &StackMgr,
                       const Runtime::Instance::FunctionInstance &Func,
@@ -133,6 +131,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
         Migr.dumpGlobal(StackMgr.getModule());
         Migr.dumpProgramCounter(StackMgr.getModule(), StartIt);
         Migr.dumpStack(StackMgr, StartIt);
+      }
 
       Migr.dumpStack(StackMgr, StartIt);
       std::cerr << "Success dumpStack" << std::endl;
