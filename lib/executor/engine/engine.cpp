@@ -126,7 +126,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
         Migr.restoreStackV1(StackMgr);
       } else {
-        Migr.restoreStackV2(StackMgr);
+        Migr.restoreStackV1(StackMgr);
       }
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;
@@ -140,8 +140,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
           Migr.dumpStackV1(StackMgr, StartIt);
         } else {
           Migr.dumpMemoryV1(StackMgr.getModule());
-          // Migr.dumpMemoryV2(StackMgr.getModule());
-          Migr.dumpStackV2(StackMgr, StartIt);
+          Migr.dumpStackV1(StackMgr, StartIt);
         }
         Migr.dumpGlobal(StackMgr.getModule());
         Migr.dumpProgramCounter(StackMgr.getModule(), StartIt);
@@ -2303,7 +2302,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
         Migr.dumpStackV1(StackMgr, PC);
       } else {
-        Migr.dumpStackV2(StackMgr, PC);
+        Migr.dumpStackV1(StackMgr, PC);
       }
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;

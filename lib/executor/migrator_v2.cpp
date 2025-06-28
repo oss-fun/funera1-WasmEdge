@@ -94,9 +94,9 @@ namespace Executor {
           }
         case 2: // S64
           {
-            int32_t high = array.values.contents[iter++];
-            int32_t low = array.values.contents[iter++];
-            int64_t val64 = ((int64_t)high << 32) | low;
+            int32_t low_bits = array.values.contents[iter++];   // Contains original LOW 32 bits
+            int32_t high_bits = array.values.contents[iter++];  // Contains original HIGH 32 bits
+            int64_t val64 = ((int64_t)high_bits << 32) | (low_bits & 0xFFFFFFFF);
             StackMgr.push(val64);
             break;
           }

@@ -431,6 +431,7 @@ public:
       return Unexpect(ErrCode::Value::IllegalPath);
     }
     dumpDirtyMemory(Data, ofs);
+    ofs.flush();
     ofs.close();
 
     // Dump all memory to all_memory.img
@@ -440,6 +441,7 @@ public:
       return Unexpect(ErrCode::Value::IllegalPath);
     }
     dumpAllMemory(Data, ofs2);
+    ofs2.flush();
     ofs2.close();
     return {};
   }
