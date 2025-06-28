@@ -13,6 +13,8 @@
 namespace WasmEdge {
 namespace Executor {
 
+static Migrator Migr = Migrator();
+
 // TODO: signumの処理無駄なのでどうにかする
 volatile sig_atomic_t DumpFlag;
 void signalHandler(int signum) {
