@@ -60,6 +60,7 @@ public:
   void dumpStack(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC);
 
   void restoreMemory(const Runtime::Instance::ModuleInstance* ModInst);
+  void restoreMemoryV1(const Runtime::Instance::ModuleInstance* ModInst);
   void restoreGlobal(const Runtime::Instance::ModuleInstance* ModInst);
   Expect<AST::InstrView::iterator> restoreProgramCounter(const Runtime::Instance::ModuleInstance* ModInst);
   Expect<void> restoreStack(Runtime::StackManager& StackMgr);
