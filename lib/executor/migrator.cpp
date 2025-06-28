@@ -212,10 +212,6 @@ namespace Executor {
     ModInst->dumpMemInst(ImageDir);
   }
 
-  void M::dumpMemoryV1(const Runtime::Instance::ModuleInstance* ModInst) {
-    ModInst->dumpMemInst("./");
-  }
-
   void M::dumpGlobal(const Runtime::Instance::ModuleInstance* ModInst) {
     ModInst->dumpGlobInst(ImageDir);
   }
