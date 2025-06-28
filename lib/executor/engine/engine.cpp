@@ -126,7 +126,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       // 環境変数AFTER_RESTORE_DUMP=1を設定すると、リストア後にダンプする
       if (auto *env = std::getenv("AFTER_RESTORE_DUMP"); env && std::string(env) == "1") {
         std::cerr << "After restore dump" << std::endl;
-        Migr.dumpMemory(StackMgr.getModule());
+        Migr.dumpMemoryV1(StackMgr.getModule());
         Migr.dumpGlobal(StackMgr.getModule());
         Migr.dumpProgramCounter(StackMgr.getModule(), StartIt);
         Migr.dumpStack(StackMgr, StartIt);

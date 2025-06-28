@@ -18,6 +18,11 @@
 #include <algorithm>
 
 namespace WasmEdge {
+
+
+namespace Runtime {
+  class StackManager;
+}
 namespace Executor {
 
 class Migrator {

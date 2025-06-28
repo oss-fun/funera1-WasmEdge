@@ -26,9 +26,6 @@ TypeT<T> Executor::runLoadOp(Runtime::StackManager &StackMgr,
     return Unexpect(ErrCode::Value::MemoryOutOfBounds);
   }
   uint32_t EA = Val.get<uint32_t>() + Instr.getMemoryOffset();
-  
-  // print the arguments of load: (base, offset)
-  spdlog::debug("load (base=:d, offset=:d)", Val.get<uint32_t>(), Instr.getMemoryOffset());
 
   // Value = Mem.Data[EA : N / 8]
   if (auto Res = MemInst.loadValue<T, BitWidth / 8>(Val.emplace<T>(), EA);
