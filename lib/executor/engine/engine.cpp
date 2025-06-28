@@ -2278,7 +2278,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       // clock_gettime(CLOCK_MONOTONIC, &t_ts1);
       // For WasmEdge
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      Migr.dumpMemory(StackMgr.getModule());
+      Migr.dumpMemoryV1(StackMgr.getModule());
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "memory, " << getTime(ts1, ts2) << std::endl;
       // std::cerr << "Success dumpMemory" << std::endl;

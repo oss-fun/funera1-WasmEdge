@@ -241,7 +241,8 @@ namespace Executor {
     checkpoint_memory(data.data(), page_size);
   }
 
-  void dumpMemoryV1(const Runtime::Instance::ModuleInstance* ModInst) {
+  void M::dumpMemoryV1(const Runtime::Instance::ModuleInstance* ModInst) {
+    std::string ImageDir = "./";
     ModInst->dumpMemInst(ImageDir);
   }
 
