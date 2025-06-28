@@ -53,6 +53,7 @@ public:
                                      const std::vector<uint32_t> &WamrCellSums);
 
   void dumpMemory(const Runtime::Instance::ModuleInstance* ModInst);
+  void dumpMemoryV1(const Runtime::Instance::ModuleInstance* ModInst);
   void dumpGlobal(const Runtime::Instance::ModuleInstance* ModInst);
   Expect<void> dumpProgramCounter(const Runtime::Instance::ModuleInstance* ModInst,
                                   AST::InstrView::iterator Iter);
