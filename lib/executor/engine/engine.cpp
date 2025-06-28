@@ -2299,7 +2299,6 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       return Unexpect(Res);
     }
 
-
     PC++;
   }
   return {};
