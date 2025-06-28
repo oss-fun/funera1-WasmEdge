@@ -241,6 +241,10 @@ namespace Executor {
     checkpoint_memory(data.data(), page_size);
   }
 
+  void dumpMemoryV1(const Runtime::Instance::ModuleInstance* ModInst) {
+    ModInst->dumpMemInst(ImageDir);
+  }
+
   void M::dumpGlobal(const Runtime::Instance::ModuleInstance* ModInst) {
     ModInst->dumpGlobInst(ImageDir);
   }
