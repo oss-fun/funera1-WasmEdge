@@ -343,7 +343,7 @@ public:
       return Unexpect(Res);
     }
     
-    if (auto Res = dumpDataPtr(filename); !Res) {
+    if (auto Res = dumpMemData(filename); !Res) {
       return Unexpect(Res);
     }
 
@@ -410,32 +410,37 @@ public:
     }
     return 0;
   }
-  
-  Expect<void> dumpDataPtr(std::string filename) {
-    // Open file
-    // filename = filename + "_dataptr.img";
-    filename = filename + "memory.img";
-    std::ofstream ofs(filename, std::ios::trunc | std::ios::binary);
-    if (!ofs) {
-      return Unexpect(ErrCode::Value::IllegalPath);
-    }
 
-    // DataPtrをfileにdump
+  Expect<int> dumpAllMemory(Span<Byte> &Data, std::ofstream &ofs) {
+    ofs.write(reinterpret_cast<char*>(Data.data()), Data.size());
+    return 0;
+  }
+  
+  Expect<void> dumpMemData(std::string filename) {
+    // Get the memory
     auto Res = getBytes(0, MemType.getLimit().getMin() * kPageSize);
     if (unlikely(!Res)) {
       return Unexpect(Res);
     }
     Span<Byte> Data = Res.value();
+    
+    // Dump dirty memory to memory.img
+    auto dirty_mem_file = filename + "memory.img";
+    std::ofstream ofs(dirty_mem_file, std::ios::trunc | std::ios::binary);
+    if (!ofs) {
+      return Unexpect(ErrCode::Value::IllegalPath);
+    }
     dumpDirtyMemory(Data, ofs);
     ofs.close();
 
-    // デバッグのために全部吐き出すやつもやる
-    // std::ofstream ofs2("all_memory.img", std::ios::trunc | std::ios::binary);
-    // if (!ofs2) {
-    //   return Unexpect(ErrCode::Value::IllegalPath);
-    // }
-    // ofs2.write(reinterpret_cast<char*>(Data.data()), Data.size());
-    // ofs2.close();
+    // Dump all memory to all_memory.img
+    auto all_mem_file = filename + "all_memory.img";
+    std::ofstream ofs2(all_mem_file, std::ios::trunc | std::ios::binary);
+    if (!ofs2) {
+      return Unexpect(ErrCode::Value::IllegalPath);
+    }
+    dumpAllMemory(Data, ofs2);
+    ofs2.close();
     return {};
   }
   
@@ -462,8 +467,17 @@ public:
     }
     
     // Restore DataPtr
-    if (auto Res = restoreDirtyMemory(filename); !Res) {
-      return Unexpect(Res);
+    // 環境変数RESTORE_MEM_TYPE=allの場合、restoreDataPtrを実行. 通常時は、restoreDitryMemoryを実行
+    if (std::getenv("RESTORE_MEM_TYPE") && std::string(std::getenv("RESTORE_MEM_TYPE")) == "all") {
+      std::cerr << "[DEBUG] restoreDataPtr" << std::endl;
+      if (auto Res = restoreAllMemory(filename); !Res) {
+        return Unexpect(Res);
+      }
+    } else {
+      std::cerr << "[DEBUG] restoreDirtyMemory" << std::endl;
+      if (auto Res = restoreDirtyMemory(filename); !Res) {
+        return Unexpect(Res);
+      }
     }
 
     return {};
@@ -510,8 +524,7 @@ public:
     return {};
   }
   
-  Expect<std::vector<uint8_t>> restoreDataPtr(std::string filename) {
-    // filename = filename + "_dataptr.img";
+  Expect<void> restoreAllMemory(std::string filename) {
     filename = filename + "all_memory.img";
     std::ifstream ifs(filename, std::ios::binary);
     if (!ifs) {
@@ -519,16 +532,30 @@ public:
     }
     // ファイルのサイズを取得
     ifs.seekg(0, std::ios::end);
-    int length = ifs.tellg();
+    std::streamsize length = ifs.tellg();
     ifs.seekg(0, std::ios::beg);
+
+    // メモリサイズとファイルサイズの一致を確認
+    uint32_t expectedSize = MemType.getLimit().getMin() * kPageSize;
+    if (static_cast<uint32_t>(length) != expectedSize) {
+      ifs.close();
+      return Unexpect(ErrCode::Value::MemoryOutOfBounds);
+    }
 
     std::vector<uint8_t> vec(length);
     ifs.read(reinterpret_cast<char*>(vec.data()), length);
     if (!ifs) {
-      // static_assert(ifs, "dataptr.imgから読み込みが成功しなかった");      
+      ifs.close();
+      return Unexpect(ErrCode::Value::IllegalPath);
     }
     ifs.close();
-    return vec;
+
+    // メモリに復元
+    if (auto Res = setBytes(Span<Byte>(vec), 0, 0, static_cast<uint32_t>(length)); !Res) {
+      return Unexpect(Res);
+    }
+
+    return {};
   }
 
 private:
