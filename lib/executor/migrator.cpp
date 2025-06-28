@@ -11,13 +11,12 @@
 namespace fs = std::filesystem;
 
 namespace WasmEdge {
-  
 namespace Executor {
     using M = Migrator;
+
   /// ================
   /// Tools
   /// ================
-
   // void Prepare(const Runtime::Instance::ModuleInstance* ModInst) {
   void M::Prepare(const Runtime::Instance::ModuleInstance* ModInst, std::string dirname) {
     for (uint32_t I = 0; I < ModInst->getFuncNum(); ++I) {
@@ -69,9 +68,9 @@ namespace Executor {
   // TODO: リファクタしたほうが良さそう
   std::vector<uint8_t> M::getTypeStack(uint32_t FuncIdx, uint32_t Offset, bool IsRetAddr) {
     uint8_t Val;
-    std::ifstream type_table(TYPE_TABLE, std::ios::binary);
-    std::ifstream tablemap_func(TYPE_TABLEMAP_FUNC, std::ios::binary);
-    std::ifstream tablemap_offset(TYPE_TABLEMAP_OFFSET, std::ios::binary);
+    std::ifstream type_table(ImageDir + TYPE_TABLE, std::ios::binary);
+    std::ifstream tablemap_func(ImageDir + TYPE_TABLEMAP_FUNC, std::ios::binary);
+    std::ifstream tablemap_offset(ImageDir + TYPE_TABLEMAP_OFFSET, std::ios::binary);
 
     /// tablemap_func
     uint32_t _FuncIdx;
@@ -158,7 +157,6 @@ namespace Executor {
       std::cerr << std::endl;
   }
   
-//   std::vector<struct CtrlInfo> M::getCtrlStack(const AST::InstrView::iterator PCNow, Runtime::Instance::FunctionInstance *Func, const std::vector<uint32_t> &WamrCellSums) {
   std::vector<M::CtrlInfo> M::getCtrlStack(const AST::InstrView::iterator PCNow,
                                      Runtime::Instance::FunctionInstance *Func,
                                      const std::vector<uint32_t> &WamrCellSums) {
@@ -220,7 +218,7 @@ namespace Executor {
   /// ================
   /// Dump functions
   /// ================
-  void M::dumpMemory(const Runtime::Instance::ModuleInstance* ModInst) {
+  void M::dumpMemoryV2(const Runtime::Instance::ModuleInstance* ModInst) {
     // Get memory instance
     auto MemInstRes = ModInst->getMemory(0);
     if (unlikely(!MemInstRes)) {
