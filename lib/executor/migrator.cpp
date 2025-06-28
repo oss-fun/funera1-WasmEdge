@@ -8,6 +8,8 @@
 #include <wasmig/stack_tables.h>
 #include <wasmig/state.h>
 
+namespace fs = std::filesystem;
+
 namespace WasmEdge {
   
 namespace Executor {
@@ -507,7 +509,7 @@ namespace Executor {
   }
 
   void M::restoreMemoryV1(const Runtime::Instance::ModuleInstance* ModInst) {
-    ModInst->restoreMemInst("./");
+    ModInst->restoreMemInst(ImageDir);
   }
 
   void M::restoreGlobal(const Runtime::Instance::ModuleInstance* ModInst) {
