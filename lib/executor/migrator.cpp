@@ -508,6 +508,10 @@ namespace Executor {
     }
   }
 
+  void M::restoreMemoryV1(const Runtime::Instance::ModuleInstance* ModInst) {
+    ModInst->restoreMemInst("./");
+  }
+
   void M::restoreGlobal(const Runtime::Instance::ModuleInstance* ModInst) {
     ModInst->restoreGlobInst(ImageDir);
   }
