@@ -937,7 +937,7 @@ private:
   /// Executor Host Function Handler
   HostFuncHandler HostFuncHelper = {};
   /// Migrator
-  Migrator Migr;
+  // Migrator Migr;
   bool RestoreFlag = true;
 };
 
