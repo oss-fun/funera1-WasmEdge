@@ -242,7 +242,6 @@ namespace Executor {
   }
 
   void M::dumpMemoryV1(const Runtime::Instance::ModuleInstance* ModInst) {
-    std::string ImageDir = "./";
     ModInst->dumpMemInst(ImageDir);
   }
 
