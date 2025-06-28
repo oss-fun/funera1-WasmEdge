@@ -103,7 +103,12 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       std::cerr << "boot_end, " << getTime(ts1) << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      Migr.restoreMemory(StackMgr.getModule());
+      // NOTE: 環境変数CR_MEMORY_V1が設定されている場合は、restoreMemoryV1を実行する
+      if (std::getenv("CR_MEMORY_V1") && std::string(std::getenv("CR_MEMORY_V1")) == "1") {
+        Migr.restoreMemoryV1(StackMgr.getModule());
+      } else {
+        Migr.restoreMemory(StackMgr.getModule());
+      }
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "memory, " << getTime(ts1, ts2) << std::endl;
 
@@ -2263,7 +2268,12 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       // clock_gettime(CLOCK_MONOTONIC, &t_ts1);
       // For WasmEdge
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      Migr.dumpMemory(StackMgr.getModule());
+      // 環境変数CR_MEMORY_V1が設定されている場合は、dumpMemoryV1を実行する
+      if (std::getenv("CR_MEMORY_V1") && std::string(std::getenv("CR_MEMORY_V1")) == "1") {  
+        Migr.dumpMemoryV1(StackMgr.getModule());
+      } else {
+        Migr.dumpMemory(StackMgr.getModule());
+      }
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "memory, " << getTime(ts1, ts2) << std::endl;
       // std::cerr << "Success dumpMemory" << std::endl;
@@ -2298,7 +2308,6 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       // InteractiveMode(breakpoint, PCSourceLoc, StackMgr);
       return Unexpect(Res);
     }
-
 
     PC++;
   }

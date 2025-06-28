@@ -220,13 +220,30 @@ namespace Executor {
   /// Dump functions
   /// ================
   void M::dumpMemory(const Runtime::Instance::ModuleInstance* ModInst) {
-    const uint32_t WASM_PAGE_SIZE = 65536;
-    Expect<Runtime::Instance::MemoryInstance *> Res = ModInst->getMemory(0);
-    Runtime::Instance::MemoryInstance *MemInst = Res.value();
+    // Get memory instance
+    auto MemInstRes = ModInst->getMemory(0);
+    if (unlikely(!MemInstRes)) {
+      std::cerr << "Failed to get memory instance: " << MemInstRes.error() << std::endl;
+      return;
+    }
+    Runtime::Instance::MemoryInstance *MemInst = MemInstRes.value();
+
+    // Get page size and memory data
     uint32_t page_size = MemInst->getPageSize();
-    auto Res2 = MemInst->getBytes(0, page_size * WASM_PAGE_SIZE);
-    Span<Byte> data = Res2.value();
+    auto DataRes = MemInst->getBytes(0, page_size * MemInst->kPageSize);
+    if (unlikely(!DataRes)) {
+      std::cerr << "Failed to get memory data: " << DataRes.error() << std::endl;
+      return;
+    }
+    Span<Byte> data = DataRes.value();
+    
+    // Checkpoint memory
     checkpoint_memory(data.data(), page_size);
+  }
+
+  void M::dumpMemoryV1(const Runtime::Instance::ModuleInstance* ModInst) {
+    std::string ImageDir = "./";
+    ModInst->dumpMemInst(ImageDir);
   }
 
   void M::dumpGlobal(const Runtime::Instance::ModuleInstance* ModInst) {
@@ -489,6 +506,10 @@ namespace Executor {
       std::cerr << "ERROR: restore_memory" << std::endl;
       exit(1);
     }
+  }
+
+  void M::restoreMemoryV1(const Runtime::Instance::ModuleInstance* ModInst) {
+    ModInst->restoreMemInst("./");
   }
 
   void M::restoreGlobal(const Runtime::Instance::ModuleInstance* ModInst) {
