@@ -10,12 +10,11 @@
 
 namespace WasmEdge {
   
-namespace Runtime {
-  class StackManager;
-}
-
 namespace Executor {
     using M = Migrator;
+  /// ================
+  /// Tools
+  /// ================
 
   // void Prepare(const Runtime::Instance::ModuleInstance* ModInst) {
   void M::Prepare(const Runtime::Instance::ModuleInstance* ModInst, std::string dirname) {
@@ -66,68 +65,68 @@ namespace Executor {
   }
 
   // TODO: リファクタしたほうが良さそう
-  // std::vector<uint8_t> M::getTypeStack(uint32_t FuncIdx, uint32_t Offset, bool IsRetAddr) {
-  //   uint8_t Val;
-  //   std::ifstream type_table(TYPE_TABLE, std::ios::binary);
-  //   std::ifstream tablemap_func(TYPE_TABLEMAP_FUNC, std::ios::binary);
-  //   std::ifstream tablemap_offset(TYPE_TABLEMAP_OFFSET, std::ios::binary);
+  std::vector<uint8_t> M::getTypeStack(uint32_t FuncIdx, uint32_t Offset, bool IsRetAddr) {
+    uint8_t Val;
+    std::ifstream type_table(TYPE_TABLE, std::ios::binary);
+    std::ifstream tablemap_func(TYPE_TABLEMAP_FUNC, std::ios::binary);
+    std::ifstream tablemap_offset(TYPE_TABLEMAP_OFFSET, std::ios::binary);
 
-  //   /// tablemap_func
-  //   uint32_t _FuncIdx;
-  //   uint64_t TablemapOffsetAddr;
-  //   tablemap_func.seekg(3*sizeof(uint32_t)*FuncIdx, std::ios_base::beg);
-  //   tablemap_func.read(reinterpret_cast<char *>(&_FuncIdx), sizeof(uint32_t));
-  //   tablemap_func.read(reinterpret_cast<char *>(&TablemapOffsetAddr), sizeof(uint64_t));
+    /// tablemap_func
+    uint32_t _FuncIdx;
+    uint64_t TablemapOffsetAddr;
+    tablemap_func.seekg(3*sizeof(uint32_t)*FuncIdx, std::ios_base::beg);
+    tablemap_func.read(reinterpret_cast<char *>(&_FuncIdx), sizeof(uint32_t));
+    tablemap_func.read(reinterpret_cast<char *>(&TablemapOffsetAddr), sizeof(uint64_t));
 
-  //   tablemap_func.close();
+    tablemap_func.close();
 
-  //   /// tablemap_offset
-  //   std::vector<uint8_t> TypeStack(0);
-  //   uint32_t LocalsSize;
-  //   tablemap_offset.seekg(TablemapOffsetAddr, std::ios_base::beg);
-  //   // 関数FuncIdxのローカルを取得
-  //   tablemap_offset.read(reinterpret_cast<char *>(&LocalsSize), sizeof(uint32_t));
-  //   for (uint32_t I = 0; I < LocalsSize; ++I) {
-  //     tablemap_offset.read(reinterpret_cast<char *>(&Val), sizeof(uint8_t));
-  //     TypeStack.push_back(Val);
-  //   }
-  //   // Offsetの位置まで移動
-  //   uint32_t _Offset;
-  //   uint64_t TypeTableAddr;
-  //   // uint64_t PreTypeTableAddr;
-  //   while(1) {
-  //     tablemap_offset.read(reinterpret_cast<char *>(&_Offset), sizeof(uint32_t));
-  //     // eofならbreak
-  //     if (tablemap_offset.eof()) break;
+    /// tablemap_offset
+    std::vector<uint8_t> TypeStack(0);
+    uint32_t LocalsSize;
+    tablemap_offset.seekg(TablemapOffsetAddr, std::ios_base::beg);
+    // 関数FuncIdxのローカルを取得
+    tablemap_offset.read(reinterpret_cast<char *>(&LocalsSize), sizeof(uint32_t));
+    for (uint32_t I = 0; I < LocalsSize; ++I) {
+      tablemap_offset.read(reinterpret_cast<char *>(&Val), sizeof(uint8_t));
+      TypeStack.push_back(Val);
+    }
+    // Offsetの位置まで移動
+    uint32_t _Offset;
+    uint64_t TypeTableAddr;
+    // uint64_t PreTypeTableAddr;
+    while(1) {
+      tablemap_offset.read(reinterpret_cast<char *>(&_Offset), sizeof(uint32_t));
+      // eofならbreak
+      if (tablemap_offset.eof()) break;
 
-  //     tablemap_offset.read(reinterpret_cast<char *>(&TypeTableAddr), sizeof(uint64_t));
-  //     if (Offset == _Offset) break;
-  //   }
+      tablemap_offset.read(reinterpret_cast<char *>(&TypeTableAddr), sizeof(uint64_t));
+      if (Offset == _Offset) break;
+    }
 
-  //   tablemap_offset.close();
+    tablemap_offset.close();
 
-  //   /// type_table
-  //   type_table.seekg(TypeTableAddr, std::ios_base::beg);
-  //   uint32_t StackSize;
-  //   type_table.read(reinterpret_cast<char *>(&StackSize), sizeof(uint32_t));
-  //   // リターンアドレスの場合、つまり関数呼び出し途中のときの場合、それ用のスタックを取得する
-  //   if (IsRetAddr) {
-  //     type_table.seekg(StackSize, std::ios_base::cur);
-  //     type_table.read(reinterpret_cast<char *>(&StackSize), sizeof(uint32_t));
-  //   }
-  //   for (uint32_t I = 0; I < StackSize; ++I) {
-  //     type_table.read(reinterpret_cast<char *>(&Val), sizeof(uint8_t));
-  //     TypeStack.push_back(Val);
-  //   }
+    /// type_table
+    type_table.seekg(TypeTableAddr, std::ios_base::beg);
+    uint32_t StackSize;
+    type_table.read(reinterpret_cast<char *>(&StackSize), sizeof(uint32_t));
+    // リターンアドレスの場合、つまり関数呼び出し途中のときの場合、それ用のスタックを取得する
+    if (IsRetAddr) {
+      type_table.seekg(StackSize, std::ios_base::cur);
+      type_table.read(reinterpret_cast<char *>(&StackSize), sizeof(uint32_t));
+    }
+    for (uint32_t I = 0; I < StackSize; ++I) {
+      type_table.read(reinterpret_cast<char *>(&Val), sizeof(uint8_t));
+      TypeStack.push_back(Val);
+    }
 
-  //   type_table.close();
+    type_table.close();
 
-  //   // debug
-  //   // std::cerr << "[DEBUG]LocalsSize: " << LocalsSize << std::endl;
-  //   // std::cerr << "[DEBUG]StackSize: " << StackSize << std::endl;
+    // debug
+    // std::cerr << "[DEBUG]LocalsSize: " << LocalsSize << std::endl;
+    // std::cerr << "[DEBUG]StackSize: " << StackSize << std::endl;
 
-  //   return TypeStack;
-  // }
+    return TypeStack;
+  }
   
   std::vector<uint8_t> M::getTypeStack_v2(uint32_t FuncIdx, uint32_t Offset) {
     StackTable table = get_stack_table(FuncIdx, Offset);
