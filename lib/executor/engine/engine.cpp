@@ -121,6 +121,14 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;
 
       // debug: wamrから取り込んだimageをリストアしてすぐdumpすると、同じものが出てくるはず
+      // 環境変数AFTER_RESTORE_DUMP=1を設定すると、リストア後にダンプする
+      if (auto *env = std::getenv("AFTER_RESTORE_DUMP"); env && std::string(env) == "1") {
+        std::cerr << "After restore dump" << std::endl;
+        Migr.dumpMemory(StackMgr.getModule());
+        Migr.dumpGlobal(StackMgr.getModule());
+        Migr.dumpProgramCounter(StackMgr.getModule(), StartIt);
+        Migr.dumpStack(StackMgr, StartIt);
+      }
       // Migr.dumpMemory(StackMgr.getModule());
       // std::cerr << "Success dumpMemory" << std::endl;
       // Migr.dumpGlobal(StackMgr.getModule());
