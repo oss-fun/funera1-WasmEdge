@@ -113,7 +113,6 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       std::cerr << "global, " << getTime(ts1, ts2) << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      // NOTE: 復元したPCから1進めないと、次の命令から始まらないので+1
       StartIt = Res.value();
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "program counter, " << getTime(ts1, ts2) << std::endl;
@@ -132,9 +131,6 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
         Migr.dumpProgramCounter(StackMgr.getModule(), StartIt);
         Migr.dumpStack(StackMgr, StartIt);
       }
-
-      Migr.dumpStack(StackMgr, StartIt);
-      std::cerr << "Success dumpStack" << std::endl;
 
       RestoreFlag = false;
     }
