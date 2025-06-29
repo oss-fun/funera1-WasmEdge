@@ -115,173 +115,174 @@ namespace Executor {
     return;
   }
 
-  void _dumpStack(
-    Migrator &M,
-    Runtime::StackManager::Frame f,
+void _dumpStack(
+    Migrator &migrator,
+    Runtime::StackManager::Frame frame,
     AST::InstrView::iterator PC, 
-    ValVariant* LocalsPtr,
-    ValVariant* ValueStackPtr,
-    std::vector<struct Migrator::CtrlInfo> &LabelStack,
+    ValVariant* localsPtr,
+    ValVariant* valueStackPtr,
+    std::vector<struct Migrator::CtrlInfo> &labelStack,
     BaseCallStackEntry& entry
-  ) {
-    const Runtime::Instance::ModuleInstance* ModInst = f.Module;
-    if (LocalsPtr == nullptr || ValueStackPtr == nullptr) {
-      std::cerr << "LocalsPtr or ValueStackPtr is nullptr" << std::endl;
-      exit(1);
+) {
+    const Runtime::Instance::ModuleInstance* modInst = frame.Module;
+    if (localsPtr == nullptr || valueStackPtr == nullptr) {
+        std::cerr << "Error: LocalsPtr or ValueStackPtr is null" << std::endl;
+        exit(1);
     }
     
-    // pc
-    auto [FuncIdx, Offset] = M.getInstrAddrExpr(ModInst, PC);
+    // Set program counter
+    auto [funcIdx, offset] = migrator.getInstrAddrExpr(modInst, PC);
     entry.pc = CodePos{
-      .fidx = FuncIdx,
-      .offset = Offset,
+        .fidx = funcIdx,
+        .offset = offset,
     };
-    spdlog::info("_dumpStack: Set pc to ({}, {})", FuncIdx, Offset);
+    spdlog::info("Setting PC to ({}, {})", funcIdx, offset);
     
-    // locals
-    // TODO: slot-sizeが128bit単位のstackから32bit単位のstackに変換する
-    ValVariant* lp = LocalsPtr;
-    Array8 local_types = get_local_types(FuncIdx);
-    std::vector<uint32_t> locals_vec;
-    for (size_t i = 0; i < local_types.size; i++) {
-      uint8_t type = local_types.contents[i];
-      // print what calls _appendConverted
-      std::cerr << "At _dumpStack, process that convert locals" << std::endl;
-      _appendConverted(locals_vec, type, lp[i]);
+    // Process locals
+    // TODO: Convert from 128bit slot-size stack to 32bit stack
+    Array8 localTypes = get_local_types(funcIdx);
+    std::vector<uint32_t> localsVec;
+    for (size_t i = 0; i < localTypes.size; i++) {
+        uint8_t type = localTypes.contents[i];
+        _appendConverted(localsVec, type, localsPtr[i]);
     }
-    // mallocしないとエラーでる.
-    // TODO: memcpyを回避する. 現在二重で値のコピーが発生していて無駄
-    uint32_t* locals_buf = (uint32_t *)malloc(locals_vec.size() * sizeof(uint32_t));
-    memcpy(locals_buf, locals_vec.data(), locals_vec.size() * sizeof(uint32_t));
+    
+    // Allocate buffer for locals (malloc required to avoid errors)
+    // TODO: Avoid memcpy - currently doing double value copying which is wasteful
+    uint32_t* localsBuffer = (uint32_t *)malloc(localsVec.size() * sizeof(uint32_t));
+    memcpy(localsBuffer, localsVec.data(), localsVec.size() * sizeof(uint32_t));
     entry.locals = {
-      .size = (uint32_t)locals_vec.size(),
-      .contents = locals_buf,
+        .size = (uint32_t)localsVec.size(),
+        .contents = localsBuffer,
     };
-    spdlog::info("_dumpStack: Set locals");
+    spdlog::info("Set locals with {} elements", localsVec.size());
 
-    // stack
-    ValVariant* sp = ValueStackPtr;
-    StackTable stack_table = get_stack_table(FuncIdx, Offset);
-    std::vector<uint32_t> stack_vec;
-    for (size_t i = 0; i < stack_table.size; i++) {
-      StackTableEntry entry = stack_table.data[i];
-      // print what calls _appendConverted
-      std::cerr << "At _dumpStack, process that convert stack" << std::endl;
-      _appendConverted(stack_vec, entry.ty, sp[i]);
+    // Process value stack
+    StackTable stackTable = get_stack_table(funcIdx, offset);
+    std::vector<uint32_t> stackVec;
+    for (size_t i = 0; i < stackTable.size; i++) {
+        StackTableEntry stackEntry = stackTable.data[i];
+        _appendConverted(stackVec, stackEntry.ty, valueStackPtr[i]);
     }
-    uint32_t* stack_buf = (uint32_t *)malloc(stack_vec.size() * sizeof(uint32_t));
-    memcpy(stack_buf, stack_vec.data(), stack_vec.size() * sizeof(uint32_t));
+    
+    // Allocate buffer for stack
+    uint32_t* stackBuffer = (uint32_t *)malloc(stackVec.size() * sizeof(uint32_t));
+    memcpy(stackBuffer, stackVec.data(), stackVec.size() * sizeof(uint32_t));
     entry.value_stack = {
-      .size = (uint32_t)stack_vec.size(),
-      .contents = stack_buf,
+        .size = (uint32_t)stackVec.size(),
+        .contents = stackBuffer,
     };
-    spdlog::info("_dumpStack: Set stack");
+    spdlog::info("Set value stack with {} elements", stackVec.size());
 
-    /// label stack
-    uint32_t label_stack_size = LabelStack.size();
-    uint32_t* begins = (uint32_t *)malloc(label_stack_size * sizeof(uint32_t));
-    uint32_t* targets = (uint32_t *)malloc(label_stack_size* sizeof(uint32_t));
-    uint32_t* stack_pointers = (uint32_t *)malloc(label_stack_size * sizeof(uint32_t));
-    uint32_t* cell_nums = (uint32_t *)malloc(label_stack_size * sizeof(uint32_t));
-    for (size_t i = 0; i < LabelStack.size(); i++) {
-        Migrator::CtrlInfo ci = LabelStack[i];
-        begins[i] = ci.BeginAddrOfs;
-        targets[i] = ci.TargetAddrOfs;
-        stack_pointers[i] = ci.SpOfs;
-        cell_nums[i] = ci.ResultCells;
+    // Process label stack
+    uint32_t labelStackSize = labelStack.size();
+    uint32_t* begins = (uint32_t *)malloc(labelStackSize * sizeof(uint32_t));
+    uint32_t* targets = (uint32_t *)malloc(labelStackSize * sizeof(uint32_t));
+    uint32_t* stackPointers = (uint32_t *)malloc(labelStackSize * sizeof(uint32_t));
+    uint32_t* cellNums = (uint32_t *)malloc(labelStackSize * sizeof(uint32_t));
+    
+    for (size_t i = 0; i < labelStack.size(); i++) {
+        Migrator::CtrlInfo ctrlInfo = labelStack[i];
+        begins[i] = ctrlInfo.BeginAddrOfs;
+        targets[i] = ctrlInfo.TargetAddrOfs;
+        stackPointers[i] = ctrlInfo.SpOfs;
+        cellNums[i] = ctrlInfo.ResultCells;
     }
+    
     entry.label_stack = {
-      .size = label_stack_size,
-      .begins = begins,
-      .targets = targets,
-      .stack_pointers = stack_pointers,
-      .cell_nums = cell_nums,
+        .size = labelStackSize,
+        .begins = begins,
+        .targets = targets,
+        .stack_pointers = stackPointers,
+        .cell_nums = cellNums,
     };
-    spdlog::info("_dumpStack: Set label stack");
-    
-    return;
-  }
+    spdlog::info("Set label stack with {} elements", labelStackSize);
+}
 
-  void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC) {
-    std::vector<Runtime::StackManager::Frame> FrameStack = StackMgr.getFrameStack();
-    std::vector<ValVariant> ValueStack = StackMgr.getValueStack();
-    std::vector<std::vector<uint8_t>> TypeStacks(FrameStack.size());
-    size_t LenFrame = FrameStack.size()-1;
+void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC) {
+    std::vector<Runtime::StackManager::Frame> frameStack = StackMgr.getFrameStack();
+    std::vector<ValVariant> valueStack = StackMgr.getValueStack();
+    std::vector<std::vector<uint8_t>> typeStacks(frameStack.size());
+    size_t frameCount = frameStack.size() - 1;
     
-    // 先にフレームごとの型スタックを取得し、TypeStacksにつめる
-    AST::InstrView::iterator PCCopy = PC;
-    uint32_t StackIdx = 1;
-    for (size_t I = FrameStack.size()-1; I > 0; --I, ++StackIdx) {
-      auto f = FrameStack[I];
-      const Runtime::Instance::ModuleInstance* ModInst = f.Module;
-      // NOTE: リターンアドレスは、実行しているアドレスの1つまえのアドレスを持っているので+1する
-      if (I != FrameStack.size() - 1) PCCopy++;
-      auto [FuncIdx, Offset] = getInstrAddrExpr(ModInst, PCCopy);
-      TypeStacks[StackIdx] = getTypeStack_v2(FuncIdx, Offset);
-      PCCopy = f.From;
+    spdlog::info("Starting stack dump with {} frames", frameCount);
+    
+    // Build type stacks for each frame
+    AST::InstrView::iterator pcCopy = PC;
+    uint32_t stackIdx = 1;
+    for (size_t i = frameStack.size() - 1; i > 0; --i, ++stackIdx) {
+        auto frame = frameStack[i];
+        const Runtime::Instance::ModuleInstance* modInst = frame.Module;
+        
+        // NOTE: Return address points to previous instruction, so +1
+        if (i != frameStack.size() - 1) {
+            pcCopy++;
+        }
+        
+        auto [funcIdx, offset] = getInstrAddrExpr(modInst, pcCopy);
+        typeStacks[stackIdx] = getTypeStack_v2(funcIdx, offset);
+        pcCopy = frame.From;
     }
 
-    // TypeStackからWAMRのセルの個数累積和みたいにする
-    // 累積和 1-indexed
-    uint32_t Cur = 0;
-    std::vector<uint32_t> WamrCellSums(StackMgr.size()+1, 0);
-    for (uint32_t StackIdx = TypeStacks.size()-1; StackIdx > 0; --StackIdx) {
-      std::vector<uint8_t> TypeStack = TypeStacks[StackIdx];
-      for (uint32_t I = 0; I < TypeStack.size(); I++) {
-          WamrCellSums[Cur+1] = WamrCellSums[Cur] + TypeStack[I];
-          Cur++;
-      }
+    // Build WAMR cell cumulative sums
+    uint32_t currentSum = 0;
+    std::vector<uint32_t> wamrCellSums(StackMgr.size() + 1, 0);
+    for (uint32_t stackIdx = typeStacks.size() - 1; stackIdx > 0; --stackIdx) {
+        std::vector<uint8_t> typeStack = typeStacks[stackIdx];
+        for (uint32_t i = 0; i < typeStack.size(); i++) {
+            wamrCellSums[currentSum + 1] = wamrCellSums[currentSum] + typeStack[i];
+            currentSum++;
+        }
     }
 
-    BaseCallStackEntry entries[LenFrame];
-    auto _PC = PC;
-    for (size_t I = FrameStack.size()-1; I > 0; --I) {
-    // for (size_t I = 1; I < LenFrame; I++) {
-      Runtime::StackManager::Frame f = FrameStack[I];
- 
-      // ModuleInstance 
-      const Runtime::Instance::ModuleInstance* ModInst = f.Module;
+    // Prepare entries array
+    BaseCallStackEntry entries[frameCount];
+    auto currentPC = PC;
+    
+    // Process each frame
+    for (size_t i = frameStack.size() - 1; i > 0; --i) {
+        Runtime::StackManager::Frame frame = frameStack[i];
+        const Runtime::Instance::ModuleInstance* modInst = frame.Module;
 
-      // ModInstがnullの場合、ModNameだけ出力してcontinue
-      if (ModInst == nullptr) {
-        std::cerr << "ModInst is nullptr" << std::endl;
-        exit(1);
-      }
+        if (modInst == nullptr) {
+            std::cerr << "Error: ModuleInstance is null for frame " << i << std::endl;
+            exit(1);
+        }
 
-      // PCのアドレスを取得
-      // _PC = (I == FrameStack.size() - 1) ? _PC : _PC-1;
-      auto [CurFidx, CurOffset] = getInstrAddrExpr(ModInst, _PC);
-      CodePos pc = {
-        .fidx = CurFidx,
-        .offset = CurOffset,
-      };
-      spdlog::info("{}th frame: PC = ({}, {})", I, pc.fidx, pc.offset);
+        // Get current PC address
+        auto [currentFuncIdx, currentOffset] = getInstrAddrExpr(modInst, currentPC);
+        CodePos pc = {
+            .fidx = currentFuncIdx,
+            .offset = currentOffset,
+        };
+        spdlog::info("Processing frame {}: PC = ({}, {})", i, pc.fidx, pc.offset);
 
-      // ローカル/スタック
-      uint32_t StackBottom = f.VPos - f.Locals;
-      ValVariant*LocalsPtr = ValueStack.data() + StackBottom;
-      ValVariant* ValueStackPtr = ValueStack.data() + StackBottom + f.Locals;
+        // Calculate local and stack pointers
+        uint32_t stackBottom = frame.VPos - frame.Locals;
+        ValVariant* localsPtr = valueStack.data() + stackBottom;
+        ValVariant* valueStackPtr = valueStack.data() + stackBottom + frame.Locals;
 
-      // ラベルスタック
-      auto Res = ModInst->getFunc(pc.fidx);
-      if (!Res) {
-        std::cerr << "FuncIdx isn't correct" << std::endl; 
-        exit(1);
-      }
-      Runtime::Instance::FunctionInstance* FuncInst = Res.value();
-      std::vector<struct CtrlInfo> CtrlStack = getCtrlStack(_PC, FuncInst, WamrCellSums);
-      _dumpStack(*this, f, _PC, LocalsPtr, ValueStackPtr, CtrlStack, entries[I-1]);
-      spdlog::info("OK _dumpStack");
+        // Get control stack (label stack)
+        auto funcResult = modInst->getFunc(pc.fidx);
+        if (!funcResult) {
+            std::cerr << "Error: Invalid function index " << pc.fidx << std::endl;
+            exit(1);
+        }
+        Runtime::Instance::FunctionInstance* funcInst = funcResult.value();
+        std::vector<struct CtrlInfo> ctrlStack = getCtrlStack(currentPC, funcInst, wamrCellSums);
+        
+        // Dump this frame
+        _dumpStack(*this, frame, currentPC, localsPtr, valueStackPtr, ctrlStack, entries[i - 1]);
+        spdlog::info("Successfully dumped frame {}", i);
 
-      // 各値を更新
-      _PC = f.From;
-
-      // debug
-      // debugFrame(I, pc.fidx, f.Locals, f.Arity, f.VPos);
+        // Update PC for next iteration
+        currentPC = frame.From;
     }
     
-    checkpoint_stack_v3(LenFrame, entries);
-  }
+    // Checkpoint the complete stack
+    checkpoint_stack_v3(frameCount, entries);
+    spdlog::info("Stack dump completed successfully");
+}
   
   /// ================
   /// Restore functions
