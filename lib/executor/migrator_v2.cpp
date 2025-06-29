@@ -273,7 +273,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
         auto [currentFuncIdx, currentOffset] = getInstrAddrExpr(modInst, currentPC);
         CodePos pc = {
             .fidx = currentFuncIdx,
-            .offset = currentOffset,
+            .offset = currentOffset+1,
         };
         spdlog::info("Processing frame {}: PC = ({}, {})", i, pc.fidx, pc.offset);
 
