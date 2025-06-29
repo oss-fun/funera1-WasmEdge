@@ -13,6 +13,13 @@
 
 namespace fs = std::filesystem;
 
+// definition constant values of type size
+// 1: S32, 2: S64, 4: S128
+static constexpr uint8_t TYPE_S32 = 1;
+static constexpr uint8_t TYPE_S64 = 2;
+static constexpr uint8_t TYPE_S128 = 4;
+
+
 namespace WasmEdge {
 namespace Executor {
     using M = Migrator;
@@ -53,66 +60,79 @@ namespace Executor {
     checkpoint_memory(data.data(), page_size);
   }
 
-  void _appendConverted(std::vector<uint32_t>& array, uint8_t type, const ValVariant Val) {
-      switch (type) {
-        case 1: // S32
+  /// Convert a ValVariant value to uint32_t array representation for serialization
+  void convertValueToUint32Array(std::vector<uint32_t>& targetArray, uint8_t valueType, const ValVariant& value) {
+      switch (valueType) {
+        case TYPE_S32:
           {
-            array.push_back(Val.get<uint32_t>());
+            targetArray.push_back(value.get<uint32_t>());
             break;
           }
-        case 2: // S64
+        case TYPE_S64:
           {
-            int64_t val64 = Val.get<int64_t>();
-            int32_t high = val64 & 0xFFFFFFFF;
-            int32_t low = (val64 >> 32) & 0xFFFFFFFF;
-            array.push_back(high);
-            array.push_back(low);
+            // Pack 64-bit value into two 32-bit values: [low_bits, high_bits]
+            int64_t val64 = value.get<int64_t>();
+            uint32_t lowBits = static_cast<uint32_t>(val64 & 0xFFFFFFFFLL);
+            uint32_t highBits = static_cast<uint32_t>((val64 >> 32) & 0xFFFFFFFFLL);
+            targetArray.push_back(lowBits);
+            targetArray.push_back(highBits);
             break;
           }
-        case 4: // S128
+        case TYPE_S128:
           {
-            std::cerr << "V128 is not supported" << std::endl;
+            std::cerr << "Error: V128 type is not supported in migration" << std::endl;
             exit(1);
           }
         default:
           {
-            std::cerr << "Unknown type: " << +type << std::endl;
+            std::cerr << "Error: Unknown value type in conversion: " << static_cast<int>(valueType) << std::endl;
             exit(1);
           }
       }
   }
 
-  void appendConverted(Runtime::StackManager& StackMgr, TypedArray array) {
-    size_t iter = 0;
-    for (size_t I = 0; I < array.types.size; I++) {
-      uint8_t type = array.types.contents[I];
-      switch (type) {
-        case 1: // S32
+  /// Restore values from uint32_t array representation back to the stack manager
+  void restoreValuesFromUint32Array(Runtime::StackManager& stackManager, TypedArray serializedArray) {
+    size_t arrayIndex = 0;
+    
+    for (size_t typeIndex = 0; typeIndex < serializedArray.types.size; typeIndex++) {
+      uint8_t valueType = serializedArray.types.contents[typeIndex];
+      
+      switch (valueType) {
+        case TYPE_S32:
           {
-            StackMgr.push(array.values.contents[iter++]);
+            if (arrayIndex >= serializedArray.values.size) {
+              std::cerr << "Error: Array index out of bounds during S32 restoration" << std::endl;
+              exit(1);
+            }
+            stackManager.push(serializedArray.values.contents[arrayIndex++]);
             break;
           }
-        case 2: // S64
+        case TYPE_S64:
           {
-            int32_t low_bits = array.values.contents[iter++];   // Contains original LOW 32 bits
-            int32_t high_bits = array.values.contents[iter++];  // Contains original HIGH 32 bits
-            int64_t val64 = ((int64_t)high_bits << 32) | (low_bits & 0xFFFFFFFF);
-            StackMgr.push(val64);
+            if (arrayIndex + 1 >= serializedArray.values.size) {
+              std::cerr << "Error: Array index out of bounds during S64 restoration" << std::endl;
+              exit(1);
+            }
+            // Unpack two 32-bit values back into 64-bit: [low_bits, high_bits]
+            uint32_t lowBits = serializedArray.values.contents[arrayIndex++];
+            uint32_t highBits = serializedArray.values.contents[arrayIndex++];
+            int64_t val64 = (static_cast<int64_t>(highBits) << 32) | static_cast<int64_t>(lowBits);
+            stackManager.push(val64);
             break;
           }
-        case 4: // S128
+        case TYPE_S128:
           {
-            std::cerr << "V128 is not supported" << std::endl;
+            std::cerr << "Error: V128 type is not supported in migration" << std::endl;
             exit(1);
           }
         default:
           {
-            std::cerr << "Unknown type: " << +type << std::endl;
+            std::cerr << "Error: Unknown value type in restoration: " << static_cast<int>(valueType) << std::endl;
             exit(1);
           }
       }
     }
-    return;
   }
 
 void _dumpStack(
@@ -144,7 +164,7 @@ void _dumpStack(
     std::vector<uint32_t> localsVec;
     for (size_t i = 0; i < localTypes.size; i++) {
         uint8_t type = localTypes.contents[i];
-        _appendConverted(localsVec, type, localsPtr[i]);
+        convertValueToUint32Array(localsVec, type, localsPtr[i]);
     }
     
     // Allocate buffer for locals (malloc required to avoid errors)
@@ -162,7 +182,7 @@ void _dumpStack(
     std::vector<uint32_t> stackVec;
     for (size_t i = 0; i < stackTable.size; i++) {
         StackTableEntry stackEntry = stackTable.data[i];
-        _appendConverted(stackVec, stackEntry.ty, valueStackPtr[i]);
+        convertValueToUint32Array(stackVec, stackEntry.ty, valueStackPtr[i]);
     }
     
     // Allocate buffer for stack
@@ -374,8 +394,8 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
       // }
 
       // 値スタック
-      std::cerr << "restore locals" << std::endl; appendConverted(StackMgr, entry.locals);
-      std::cerr << "restore stack" << std::endl;  appendConverted(StackMgr, entry.value_stack);
+      std::cerr << "restore locals" << std::endl; restoreValuesFromUint32Array(StackMgr, entry.locals);
+      std::cerr << "restore stack" << std::endl;  restoreValuesFromUint32Array(StackMgr, entry.value_stack);
 
       From = PC;
 
