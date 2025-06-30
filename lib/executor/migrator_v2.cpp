@@ -141,31 +141,25 @@ namespace Executor {
   }
 
 void _dumpStack(
-    Migrator &migrator,
-    Runtime::StackManager::Frame frame,
-    AST::InstrView::iterator PC, 
+    CodePos pc,
     ValVariant* localsPtr,
     ValVariant* valueStackPtr,
     std::vector<struct Migrator::CtrlInfo> &labelStack,
     BaseCallStackEntry& entry
 ) {
-    const Runtime::Instance::ModuleInstance* modInst = frame.Module;
     if (localsPtr == nullptr || valueStackPtr == nullptr) {
         std::cerr << "Error: LocalsPtr or ValueStackPtr is null" << std::endl;
         exit(1);
     }
     
     // Set program counter
-    auto [funcIdx, offset] = migrator.getInstrAddrExpr(modInst, PC);
-    entry.pc = CodePos{
-        .fidx = funcIdx,
-        .offset = offset,
-    };
-    spdlog::info("Setting PC to ({}, {})", funcIdx, offset);
+    entry.pc = pc;
+    spdlog::info("Setting PC to ({}, {})", pc.fidx, pc.offset);
     
     // Process locals
     // TODO: Convert from 128bit slot-size stack to 32bit stack
-    Array8 localTypes = get_local_types(funcIdx);
+    spdlog::info("Processing locals for function index {}", pc.fidx);
+    Array8 localTypes = get_local_types(pc.fidx);
     std::vector<uint32_t> localsVec;
     for (size_t i = 0; i < localTypes.size; i++) {
         uint8_t type = localTypes.contents[i];
@@ -183,7 +177,7 @@ void _dumpStack(
     spdlog::info("Set locals with {} elements", localsVec.size());
 
     // Process value stack
-    StackTable stackTable = get_stack_table(funcIdx, offset);
+    StackTable stackTable = get_stack_table(pc.fidx, pc.offset);
     std::vector<uint32_t> stackVec;
     for (size_t i = 0; i < stackTable.size; i++) {
         StackTableEntry stackEntry = stackTable.data[i];
@@ -275,12 +269,12 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
         }
 
         // Get current PC address
-        auto [currentFuncIdx, currentOffset] = getInstrAddrExpr(modInst, currentPC);
+        auto [currentFuncIdx, currentOffset] = getInstrAddrExpr(modInst, currentPC+1);
         CodePos pc = {
             .fidx = currentFuncIdx,
-            .offset = currentOffset+1,
+            .offset = currentOffset,
         };
-        spdlog::info("Processing frame {}: PC = ({}, {})", i, pc.fidx, pc.offset);
+        spdlog::info("Processing frame {}: PC = ({}, {}), OpCode: {}", i, pc.fidx, pc.offset, (currentPC+1)->getOpCode());
 
         // Calculate local and stack pointers
         uint32_t stackBottom = frame.VPos - frame.Locals;
@@ -297,7 +291,8 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
         std::vector<struct CtrlInfo> ctrlStack = getCtrlStack(currentPC, funcInst, wamrCellSums);
         
         // Dump this frame
-        _dumpStack(*this, frame, currentPC, localsPtr, valueStackPtr, ctrlStack, entries[i - 1]);
+        // _dumpStack(*this, frame, pc, localsPtr, valueStackPtr, ctrlStack, entries[i - 1]);
+        _dumpStack(pc, localsPtr, valueStackPtr, ctrlStack, entries[i - 1]);
         spdlog::info("Successfully dumped frame {}", i);
 
         // Update PC for next iteration
