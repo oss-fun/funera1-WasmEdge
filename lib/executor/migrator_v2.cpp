@@ -25,7 +25,7 @@ namespace Executor {
     using M = Migrator;
 
 
-  std::vector<uint8_t> M::getTypeStack_v2(uint32_t FuncIdx, uint32_t Offset) {
+  std::vector<uint8_t> M::getTypeStackV2(uint32_t FuncIdx, uint32_t Offset) {
     StackTable table = get_stack_table(FuncIdx, Offset);
     std::vector<uint8_t> TypeStack(table.size);
     for (size_t i = 0; i < table.size; i++) {
@@ -33,6 +33,11 @@ namespace Executor {
       TypeStack[i] = entry.ty;
     }
     return TypeStack;
+  }
+
+  bool M::isExistTypeStackTableV2() {
+    namespace fs = std::filesystem;
+    return fs::exists(ImageDir + "stack-table.msgpack");
   }
 
   /// ================
@@ -240,7 +245,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
         }
         
         auto [funcIdx, offset] = getInstrAddrExpr(modInst, pcCopy);
-        typeStacks[stackIdx] = getTypeStack_v2(funcIdx, offset);
+        typeStacks[stackIdx] = getTypeStackV2(funcIdx, offset);
         pcCopy = frame.From;
     }
 

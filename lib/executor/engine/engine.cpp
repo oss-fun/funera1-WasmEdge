@@ -103,7 +103,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       std::cerr << "boot_end, " << getTime(ts1) << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      Migr.restoreMemoryV1(StackMgr.getModule());
+      Migr.restoreMemoryV2(StackMgr.getModule());
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "memory, " << getTime(ts1, ts2) << std::endl;
 
@@ -135,7 +135,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
         } else {
           Migr.dumpStackV2(StackMgr, StartIt);
         }
-        Migr.dumpMemoryV1(StackMgr.getModule());
+        Migr.dumpMemoryV2(StackMgr.getModule());
         Migr.dumpGlobal(StackMgr.getModule());
         Migr.dumpProgramCounter(StackMgr.getModule(), StartIt);
       }
@@ -2262,16 +2262,23 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
     */
     if (unlikely(DumpFlag&isDumpMode)) {
 
-      if (!Migr.isExistTypeStackTable()) {
-        spdlog::error("Not found the stack-table.msgpack");
-        return {};
+      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+        if (!Migr.isExistTypeStackTable()) {
+          spdlog::error("Not found the type tables");
+          return {};
+        }
+      } else {
+        if (!Migr.isExistTypeStackTableV2()) {
+          spdlog::error("Not found the stack-table-v2.msgpack");
+          return {};
+        }
       }
 
       struct timespec ts1, ts2;
       // clock_gettime(CLOCK_MONOTONIC, &t_ts1);
       // For WasmEdge
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      Migr.dumpMemoryV1(StackMgr.getModule());
+      Migr.dumpMemoryV2(StackMgr.getModule());
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "memory, " << getTime(ts1, ts2) << std::endl;
 

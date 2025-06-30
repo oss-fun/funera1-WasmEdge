@@ -48,8 +48,9 @@ public:
   uint32_t getFuncIdx(const AST::InstrView::iterator PC);
   std::pair<uint32_t, uint32_t> getInstrAddrExpr(const Runtime::Instance::ModuleInstance *ModInst, AST::InstrView::iterator PC);
   std::vector<uint8_t> getTypeStack(uint32_t FuncIdx, uint32_t Offset, bool IsRetAddr);
-  std::vector<uint8_t> getTypeStack_v2(uint32_t FuncIdx, uint32_t Offset);
+  std::vector<uint8_t> getTypeStackV2(uint32_t FuncIdx, uint32_t Offset);
   bool isExistTypeStackTable();
+  bool isExistTypeStackTableV2();
 
   void debugFrame(uint32_t FrameIdx, uint32_t EnterFuncIdx, uint32_t Locals, uint32_t Arity, uint32_t VPos);
 
