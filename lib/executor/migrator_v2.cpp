@@ -25,8 +25,8 @@ namespace Executor {
     using M = Migrator;
 
 
-  std::vector<uint8_t> M::getTypeStackV2(uint32_t FuncIdx, uint32_t Offset) {
-    StackTable table = get_stack_table(FuncIdx, Offset);
+  std::vector<uint8_t> M::getTypeStackV2(uint32_t FuncIdx, uint32_t Offset, bool isTopFrame) {
+    StackTable table = get_stack_table(FuncIdx, Offset, isTopFrame);
     std::vector<uint8_t> TypeStack(table.size);
     for (size_t i = 0; i < table.size; i++) {
       StackTableEntry entry = table.data[i];
@@ -145,7 +145,8 @@ void _dumpStack(
     ValVariant* localsPtr,
     ValVariant* valueStackPtr,
     std::vector<struct Migrator::CtrlInfo> &labelStack,
-    BaseCallStackEntry& entry
+    BaseCallStackEntry& entry,
+    std::vector<uint8_t>& typeStack
 ) {
     if (localsPtr == nullptr || valueStackPtr == nullptr) {
         std::cerr << "Error: LocalsPtr or ValueStackPtr is null" << std::endl;
@@ -177,11 +178,9 @@ void _dumpStack(
     spdlog::info("Set locals with {} elements", localsVec.size());
 
     // Process value stack
-    StackTable stackTable = get_stack_table(pc.fidx, pc.offset);
     std::vector<uint32_t> stackVec;
-    for (size_t i = 0; i < stackTable.size; i++) {
-        StackTableEntry stackEntry = stackTable.data[i];
-        convertValueToUint32Array(stackVec, stackEntry.ty, valueStackPtr[i]);
+    for (size_t i = 0; i < typeStack.size(); i++) {
+        convertValueToUint32Array(stackVec, typeStack[i], valueStackPtr[i]);
     }
     
     // Allocate buffer for stack
@@ -226,30 +225,25 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
     
     spdlog::info("Starting stack dump with {} frames", frameCount);
     
-    // Build type stacks for each frame
+    // Build type stacks for each frame (skip frame 0 which is the dummy frame)
     AST::InstrView::iterator pcCopy = PC;
-    uint32_t stackIdx = 1;
-    for (size_t i = frameStack.size() - 1; i > 0; --i, ++stackIdx) {
-        auto frame = frameStack[i];
+    for (size_t frameIndex = frameStack.size() - 1; frameIndex > 0; --frameIndex) {
+        bool isTopFrame = (frameIndex == frameStack.size() - 1);
+        auto frame = frameStack[frameIndex];
         const Runtime::Instance::ModuleInstance* modInst = frame.Module;
         
-        // NOTE: Return address points to previous instruction, so +1
-        if (i != frameStack.size() - 1) {
-            pcCopy++;
-        }
-        
         auto [funcIdx, offset] = getInstrAddrExpr(modInst, pcCopy);
-        typeStacks[stackIdx] = getTypeStackV2(funcIdx, offset);
+        typeStacks[frameIndex] = getTypeStackV2(funcIdx, offset, isTopFrame);
         pcCopy = frame.From;
     }
 
-    // Build WAMR cell cumulative sums
+    // Build WAMR cell cumulative sums (process frames from bottom to top)
     uint32_t currentSum = 0;
     std::vector<uint32_t> wamrCellSums(StackMgr.size() + 1, 0);
-    for (uint32_t stackIdx = typeStacks.size() - 1; stackIdx > 0; --stackIdx) {
-        std::vector<uint8_t> typeStack = typeStacks[stackIdx];
-        for (uint32_t i = 0; i < typeStack.size(); i++) {
-            wamrCellSums[currentSum + 1] = wamrCellSums[currentSum] + typeStack[i];
+    for (size_t frameIndex = frameStack.size() - 1; frameIndex > 0; --frameIndex) {
+        std::vector<uint8_t>& typeStack = typeStacks[frameIndex];
+        for (size_t typeIndex = 0; typeIndex < typeStack.size(); typeIndex++) {
+            wamrCellSums[currentSum + 1] = wamrCellSums[currentSum] + typeStack[typeIndex];
             currentSum++;
         }
     }
@@ -258,13 +252,13 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
     BaseCallStackEntry entries[frameCount];
     auto currentPC = PC;
     
-    // Process each frame
-    for (size_t i = frameStack.size() - 1; i > 0; --i) {
-        Runtime::StackManager::Frame frame = frameStack[i];
+    // Process each frame for dumping
+    for (size_t frameIndex = frameStack.size() - 1; frameIndex > 0; --frameIndex) {
+        Runtime::StackManager::Frame frame = frameStack[frameIndex];
         const Runtime::Instance::ModuleInstance* modInst = frame.Module;
 
         if (modInst == nullptr) {
-            std::cerr << "Error: ModuleInstance is null for frame " << i << std::endl;
+            std::cerr << "Error: ModuleInstance is null for frame " << frameIndex << std::endl;
             exit(1);
         }
 
@@ -274,7 +268,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
             .fidx = currentFuncIdx,
             .offset = currentOffset,
         };
-        spdlog::info("Processing frame {}: PC = ({}, {}), OpCode: {}", i, pc.fidx, pc.offset, (currentPC)->getOpCode());
+        spdlog::info("Processing frame {}: PC = ({}, {}), OpCode: {}", frameIndex, pc.fidx, pc.offset, (currentPC)->getOpCode());
 
         // Calculate local and stack pointers
         uint32_t stackBottom = frame.VPos - frame.Locals;
@@ -290,10 +284,10 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
         Runtime::Instance::FunctionInstance* funcInst = funcResult.value();
         std::vector<struct CtrlInfo> ctrlStack = getCtrlStack(currentPC, funcInst, wamrCellSums);
         
-        // Dump this frame
-        // _dumpStack(*this, frame, pc, localsPtr, valueStackPtr, ctrlStack, entries[i - 1]);
-        _dumpStack(pc, localsPtr, valueStackPtr, ctrlStack, entries[i - 1]);
-        spdlog::info("Successfully dumped frame {}", i);
+        // Dump this frame using the pre-computed type stack
+        size_t entryIndex = frameIndex - 1;  // Convert frame index to entry array index
+        _dumpStack(pc, localsPtr, valueStackPtr, ctrlStack, entries[entryIndex], typeStacks[frameIndex]);
+        spdlog::info("Successfully dumped frame {}", frameIndex);
 
         // Update PC for next iteration
         currentPC = frame.From;
