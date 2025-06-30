@@ -103,12 +103,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       std::cerr << "boot_end, " << getTime(ts1) << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      // NOTE: 環境変数CR_MEMORY_V1が設定されている場合は、restoreMemoryV1を実行する
-      if (std::getenv("CR_MEMORY_V1") && std::string(std::getenv("CR_MEMORY_V1")) == "1") {
-        Migr.restoreMemoryV1(StackMgr.getModule());
-      } else {
-        Migr.restoreMemory(StackMgr.getModule());
-      }
+      Migr.restoreMemoryV2(StackMgr.getModule());
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "memory, " << getTime(ts1, ts2) << std::endl;
 
@@ -123,7 +118,11 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       std::cerr << "program counter, " << getTime(ts1, ts2) << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      Migr.restoreStack(StackMgr);
+      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+        Migr.restoreStackV1(StackMgr);
+      } else {
+        Migr.restoreStackV2(StackMgr);
+      }
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;
 
@@ -131,10 +130,14 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       // 環境変数AFTER_RESTORE_DUMP=1を設定すると、リストア後にダンプする
       if (auto *env = std::getenv("AFTER_RESTORE_DUMP"); env && std::string(env) == "1") {
         std::cerr << "After restore dump" << std::endl;
-        Migr.dumpMemory(StackMgr.getModule());
+        if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+          Migr.dumpStackV1(StackMgr, StartIt);
+        } else {
+          Migr.dumpStackV2(StackMgr, StartIt);
+        }
+        Migr.dumpMemoryV2(StackMgr.getModule());
         Migr.dumpGlobal(StackMgr.getModule());
         Migr.dumpProgramCounter(StackMgr.getModule(), StartIt);
-        Migr.dumpStack(StackMgr, StartIt);
       }
 
       RestoreFlag = false;
@@ -2259,24 +2262,25 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
     */
     if (unlikely(DumpFlag&isDumpMode)) {
 
-      if (!Migr.isExistTypeStackTable()) {
-        spdlog::error("Not found the stack-table.msgpack");
-        return {};
+      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+        if (!Migr.isExistTypeStackTable()) {
+          spdlog::error("Not found the type tables");
+          return {};
+        }
+      } else {
+        if (!Migr.isExistTypeStackTableV2()) {
+          spdlog::error("Not found the stack-table-v2.msgpack");
+          return {};
+        }
       }
 
       struct timespec ts1, ts2;
       // clock_gettime(CLOCK_MONOTONIC, &t_ts1);
       // For WasmEdge
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      // 環境変数CR_MEMORY_V1が設定されている場合は、dumpMemoryV1を実行する
-      if (std::getenv("CR_MEMORY_V1") && std::string(std::getenv("CR_MEMORY_V1")) == "1") {  
-        Migr.dumpMemoryV1(StackMgr.getModule());
-      } else {
-        Migr.dumpMemory(StackMgr.getModule());
-      }
+      Migr.dumpMemoryV2(StackMgr.getModule());
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "memory, " << getTime(ts1, ts2) << std::endl;
-      // std::cerr << "Success dumpMemory" << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpGlobal(StackMgr.getModule());
@@ -2291,12 +2295,14 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       // std::cerr << "Success dumpIter" << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      Migr.dumpStack(StackMgr, PC);
+      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+        Migr.dumpStackV1(StackMgr, PC);
+      } else {
+        Migr.dumpStackV2(StackMgr, PC);
+      }
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;
       // std::cerr << "Success dumpStack" << std::endl;
-      // 
-      exit(1);
       return {};
     }
 

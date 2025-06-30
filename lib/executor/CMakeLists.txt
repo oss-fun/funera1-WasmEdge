@@ -31,6 +31,7 @@ wasmedge_add_library(wasmedgeExecutor
   helper.cpp
   executor.cpp
   migrator.cpp
+  migrator_v2.cpp
 )
 
 include(FetchContent)

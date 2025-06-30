@@ -18,6 +18,11 @@
 #include <algorithm>
 
 namespace WasmEdge {
+
+
+namespace Runtime {
+  class StackManager;
+}
 namespace Executor {
 
 class Migrator {
@@ -43,8 +48,9 @@ public:
   uint32_t getFuncIdx(const AST::InstrView::iterator PC);
   std::pair<uint32_t, uint32_t> getInstrAddrExpr(const Runtime::Instance::ModuleInstance *ModInst, AST::InstrView::iterator PC);
   std::vector<uint8_t> getTypeStack(uint32_t FuncIdx, uint32_t Offset, bool IsRetAddr);
-  std::vector<uint8_t> getTypeStack_v2(uint32_t FuncIdx, uint32_t Offset);
+  std::vector<uint8_t> getTypeStackV2(uint32_t FuncIdx, uint32_t Offset);
   bool isExistTypeStackTable();
+  bool isExistTypeStackTableV2();
 
   void debugFrame(uint32_t FrameIdx, uint32_t EnterFuncIdx, uint32_t Locals, uint32_t Arity, uint32_t VPos);
 
@@ -52,18 +58,20 @@ public:
                                      Runtime::Instance::FunctionInstance *Func,
                                      const std::vector<uint32_t> &WamrCellSums);
 
-  void dumpMemory(const Runtime::Instance::ModuleInstance* ModInst);
   void dumpMemoryV1(const Runtime::Instance::ModuleInstance* ModInst);
+  void dumpMemoryV2(const Runtime::Instance::ModuleInstance* ModInst);
   void dumpGlobal(const Runtime::Instance::ModuleInstance* ModInst);
   Expect<void> dumpProgramCounter(const Runtime::Instance::ModuleInstance* ModInst,
                                   AST::InstrView::iterator Iter);
-  void dumpStack(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC);
+  void dumpStackV1(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC);
+  void dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC);
 
-  void restoreMemory(const Runtime::Instance::ModuleInstance* ModInst);
   void restoreMemoryV1(const Runtime::Instance::ModuleInstance* ModInst);
+  void restoreMemoryV2(const Runtime::Instance::ModuleInstance* ModInst);
   void restoreGlobal(const Runtime::Instance::ModuleInstance* ModInst);
   Expect<AST::InstrView::iterator> restoreProgramCounter(const Runtime::Instance::ModuleInstance* ModInst);
-  Expect<void> restoreStack(Runtime::StackManager& StackMgr);
+  Expect<void> restoreStackV1(Runtime::StackManager& StackMgr);
+  Expect<void> restoreStackV2(Runtime::StackManager& StackMgr);
 
 private:
   const std::string NULL_MOD_NAME = "null";
