@@ -93,11 +93,6 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       const std::string imageDir = Conf.getStatisticsConfigure().getImageDir();
       std::cerr << "imageDir: " << imageDir << std::endl;
 
-      auto Res = Migr.restoreProgramCounter(Func.getModule());
-      if (!Res) {
-        return Unexpect(Res);
-      }
-
       struct timespec ts1, ts2;
       clock_gettime(CLOCK_MONOTONIC, &ts1);
       std::cerr << "boot_end, " << getTime(ts1) << std::endl;
@@ -113,6 +108,10 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       std::cerr << "global, " << getTime(ts1, ts2) << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
+      auto Res = Migr.restoreProgramCounter(Func.getModule());
+      if (!Res) {
+        return Unexpect(Res);
+      }
       StartIt = Res.value();
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "program counter, " << getTime(ts1, ts2) << std::endl;
@@ -199,7 +198,11 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
           ErrInfo::InfoInstruction(Instr.getOpCode(), Instr.getOffset()));
       return Unexpect(ErrCode::Value::Unreachable);
     case OpCode::Nop:
-      if (char* env = getenv("NOP_CKPT"); env && (std::string(env) == "1")) DumpFlag = 1;
+      if (char* env = getenv("NOP_CKPT"); env && (std::string(env) == "1")) {
+        DumpFlag = 1;
+        auto [FuncIdx, Offset] = Migr.getInstrAddrExpr(StackMgr.getModule(), PC);
+        spdlog::info("Nop checkpoint at FuncIdx: {}, Offset: {}", FuncIdx, Offset);
+      }
       return {};
     case OpCode::Block:
       return {};
@@ -2306,12 +2309,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       return {};
     }
 
-    // OpCode Code = PC->getOpCode();
-    // std::cout << "[DEBUG]OpCode: 0x" << std::hex << (uint16_t)Code << std::dec << std::endl;
     if (auto Res = Dispatch(); !Res) {
-      // SourceLoc PCSourceLoc = Migr.getSourceLoc(PC);
-      // std::cout << "[WASMEDGE ERROR] PC is " << PCSourceLoc.FuncIdx << " " << PCSourceLoc.Offset << std::endl;
-      // InteractiveMode(breakpoint, PCSourceLoc, StackMgr);
       return Unexpect(Res);
     }
 

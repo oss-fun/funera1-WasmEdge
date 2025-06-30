@@ -269,12 +269,12 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
         }
 
         // Get current PC address
-        auto [currentFuncIdx, currentOffset] = getInstrAddrExpr(modInst, currentPC+1);
+        auto [currentFuncIdx, currentOffset] = getInstrAddrExpr(modInst, currentPC);
         CodePos pc = {
             .fidx = currentFuncIdx,
             .offset = currentOffset,
         };
-        spdlog::info("Processing frame {}: PC = ({}, {}), OpCode: {}", i, pc.fidx, pc.offset, (currentPC+1)->getOpCode());
+        spdlog::info("Processing frame {}: PC = ({}, {}), OpCode: {}", i, pc.fidx, pc.offset, (currentPC)->getOpCode());
 
         // Calculate local and stack pointers
         uint32_t stackBottom = frame.VPos - frame.Locals;
