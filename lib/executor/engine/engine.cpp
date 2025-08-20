@@ -17,10 +17,6 @@ static Migrator Migr = Migrator();
 
 // TODO: signumの処理無駄なのでどうにかする
 volatile sig_atomic_t DumpFlag;
-void signalHandler(int signum) {
-  // NOTE: DumpFlag = 1としたいが、WasmEdgeのlinterが関数の引数を使わないコードを許さないので、DumpFlag = signum|1としている
-  DumpFlag = signum|1;
-}
 
 int64_t getTime(timespec ts1) {
   int64_t sec = ts1.tv_sec;
@@ -113,6 +109,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
         return Unexpect(Res);
       }
       StartIt = Res.value();
+      StartIt += 1; // 保存は、前の命令と対応づけているので、復元時に+1
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "program counter, " << getTime(ts1, ts2) << std::endl;
 
@@ -2230,12 +2227,6 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
     }
   };
 
-  // signal handler
-  struct sigaction sa;
-  memset(&sa, 0, sizeof(sa));
-  sa.sa_handler = signalHandler;
-  sigaction(SIGINT, &sa, nullptr);
-
   const uint8_t isInstructionCounting = Conf.getStatisticsConfigure().isInstructionCounting();
   const uint8_t isCostMeasuring = Conf.getStatisticsConfigure().isCostMeasuring();
   const uint8_t isDumpMode = !Conf.getStatisticsConfigure().getDumpFlag();
@@ -2259,12 +2250,15 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       }
     }
 
+    if (auto Res = Dispatch(); !Res) {
+      return Unexpect(Res);
+    }
+
     /* NOTE
         DumpFlag: checkpointシグナルを受け取ったときに1が代入される。受け取るまでは0が入る。
         isDumpMode: --no-checkpointオプションがない場合に1、ある場合に0が入る 
     */
-    if (unlikely(DumpFlag&isDumpMode)) {
-
+    if (unlikely(getCheckpointFlag() & isDumpMode)) {
       if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
         if (!Migr.isExistTypeStackTable()) {
           spdlog::error("Not found the type tables");
@@ -2277,6 +2271,8 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
         }
       }
 
+      const AST::InstrView::iterator Iter = PC;
+      std::cout << "[DEBUG] (Iter, Iter->Offset, Iter->OpCode) = (" << Iter << ", " << Iter->getOffset() << ", " << OpCodeStr[Iter->getOpCode()] << ")" << std::endl;
       struct timespec ts1, ts2;
       // clock_gettime(CLOCK_MONOTONIC, &t_ts1);
       // For WasmEdge
@@ -2292,25 +2288,21 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
 
       // std::cerr << "Success dumpGlobal" << std::endl;
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      Migr.dumpProgramCounter(StackMgr.getModule(), PC);
+      Migr.dumpProgramCounter(StackMgr.getModule(), Iter);
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "program counter, " << getTime(ts1, ts2) << std::endl;
       // std::cerr << "Success dumpIter" << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
       if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
-        Migr.dumpStackV1(StackMgr, PC);
+        Migr.dumpStackV1(StackMgr, Iter);
       } else {
-        Migr.dumpStackV2(StackMgr, PC);
+        Migr.dumpStackV2(StackMgr, Iter);
       }
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;
       // std::cerr << "Success dumpStack" << std::endl;
       return {};
-    }
-
-    if (auto Res = Dispatch(); !Res) {
-      return Unexpect(Res);
     }
 
     PC++;

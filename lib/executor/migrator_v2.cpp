@@ -22,11 +22,19 @@ static constexpr uint8_t TYPE_S128 = 4;
 
 namespace WasmEdge {
 namespace Executor {
-    using M = Migrator;
+  using M = Migrator;
+  static bool checkpointFlag = false;
 
+  bool setCheckpointFlag(bool flag) {
+    checkpointFlag = flag;
+    return true;
+  }
+  bool getCheckpointFlag() {
+    return checkpointFlag;
+  }
 
   std::vector<uint8_t> M::getTypeStackV2(uint32_t FuncIdx, uint32_t Offset, bool isTopFrame) {
-    uint32_t offset = (isTopFrame) ? Offset : Offset - 1;
+    uint32_t offset = (isTopFrame) ? Offset : Offset + 1;
     StackTable table = get_stack_table(FuncIdx, offset);
     std::vector<uint8_t> TypeStack(table.size);
     for (size_t i = 0; i < table.size; i++) {
@@ -169,7 +177,7 @@ void _dumpStack(
         convertValueToUint32Array(localsVec, type, localsPtr[i]);
     }
 
-    uint32_t offset = (isFrameTop) ? pc.offset : pc.offset - 1;
+    uint32_t offset = (isFrameTop) ? pc.offset : pc.offset + 1;
     Array8 locals_types = get_local_types(pc.fidx);
     StackTable stack_table = get_stack_table(pc.fidx, offset);
     Array8 stack_types = convert_type_stack_from_stack_table(&stack_table);
@@ -275,7 +283,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
         Runtime::StackManager::Frame frame = frameStack[frameIndex];
         const Runtime::Instance::ModuleInstance* modInst = frame.Module;
         bool isTopFrame = (frameIndex == frameStack.size() - 1);
-        if (!isTopFrame) currentPC += 1;
+        // if (!isTopFrame) currentPC += 1;
 
         if (modInst == nullptr) {
             std::cerr << "Error: ModuleInstance is null for frame " << frameIndex << std::endl;
@@ -378,28 +386,28 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
       // uint32_t EnterFuncIdx;
       // ifs.read(reinterpret_cast<char *>(&EnterFuncIdx), sizeof(uint32_t));
       
-        auto ResPC = _restorePC(Module, entry.pc.fidx, entry.pc.offset);
-        if (!ResPC) {
-          return Unexpect(ResPC);
-        }
-        PC = ResPC.value();
-        // リターンアドレスは1つ前のアドレスを持っているので-1する
-        // if (I < LenFrame) PC--;
+      auto ResPC = _restorePC(Module, entry.pc.fidx, entry.pc.offset);
+      if (!ResPC) {
+        return Unexpect(ResPC);
+      }
+      PC = ResPC.value();
+      // WasmEdgeのリターンアドレスは1つ前のアドレスを持っているので-1する
+      // if (I < LenFrame) PC -= 1;
 
-        // ローカルと返り値の数
-        auto ResFunc = Module->getFunc(entry.pc.fidx);
-        if (!ResFunc) {
-          return Unexpect(ResFunc);
-        }
-        const Runtime::Instance::FunctionInstance* Func = ResFunc.value();
-        const auto &FuncType = Func->getFuncType();
-        const uint32_t ArgsN = static_cast<uint32_t>(FuncType.getParamTypes().size());
-        const uint32_t RetsN =
-            static_cast<uint32_t>(FuncType.getReturnTypes().size());
+      // ローカルと返り値の数
+      auto ResFunc = Module->getFunc(entry.pc.fidx);
+      if (!ResFunc) {
+        return Unexpect(ResFunc);
+      }
+      const Runtime::Instance::FunctionInstance* Func = ResFunc.value();
+      const auto &FuncType = Func->getFuncType();
+      const uint32_t ArgsN = static_cast<uint32_t>(FuncType.getParamTypes().size());
+      const uint32_t RetsN =
+          static_cast<uint32_t>(FuncType.getReturnTypes().size());
 
-        // TODO: Localsに対応する値をenterFunctionと対応してるか確認する
-        uint32_t Locals = ArgsN + Func->getLocalNum();
-        uint32_t VPos = StackMgr.size() + Locals;
+      // TODO: Localsに対応する値をenterFunctionと対応してるか確認する
+      uint32_t Locals = ArgsN + Func->getLocalNum();
+      uint32_t VPos = StackMgr.size() + Locals;
 
       // if (I == 0) From = PC; // 一番bottomのフレームのリターンアドレスはWasmEdge特有なので、それを使う
       // 先頭フレームはフレームスタックに入っていないのでpushしない
