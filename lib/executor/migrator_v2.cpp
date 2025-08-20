@@ -26,7 +26,8 @@ namespace Executor {
 
 
   std::vector<uint8_t> M::getTypeStackV2(uint32_t FuncIdx, uint32_t Offset, bool isTopFrame) {
-    StackTable table = get_stack_table(FuncIdx, Offset, isTopFrame);
+    uint32_t offset = (isTopFrame) ? Offset : Offset - 1;
+    StackTable table = get_stack_table(FuncIdx, offset);
     std::vector<uint8_t> TypeStack(table.size);
     for (size_t i = 0; i < table.size; i++) {
       StackTableEntry entry = table.data[i];
@@ -145,8 +146,9 @@ void _dumpStack(
     ValVariant* localsPtr,
     ValVariant* valueStackPtr,
     std::vector<struct Migrator::CtrlInfo> &labelStack,
-    BaseCallStackEntry& entry,
-    std::vector<uint8_t>& typeStack
+    CallStackEntry& entry,
+    std::vector<uint8_t>& typeStack,
+    bool isFrameTop
 ) {
     if (localsPtr == nullptr || valueStackPtr == nullptr) {
         std::cerr << "Error: LocalsPtr or ValueStackPtr is null" << std::endl;
@@ -166,12 +168,27 @@ void _dumpStack(
         uint8_t type = localTypes.contents[i];
         convertValueToUint32Array(localsVec, type, localsPtr[i]);
     }
+
+    uint32_t offset = (isFrameTop) ? pc.offset : pc.offset - 1;
+    Array8 locals_types = get_local_types(pc.fidx);
+    StackTable stack_table = get_stack_table(pc.fidx, offset);
+    Array8 stack_types = convert_type_stack_from_stack_table(&stack_table);
+    
+    // debug
+    printf("[DEBUG] print types at (%d, %d):\n", pc.fidx, offset);
+    for (int i = 0; i < (int)locals_types.size; i++) {
+      printf("Local type at index %d: %d\n", i, locals_types.contents[i]);
+    }
+    for (int i = 0; i < (int)stack_types.size; i++) {
+      printf("Stack type at index %d: %d\n", i, stack_types.contents[i]);
+    }
     
     // Allocate buffer for locals (malloc required to avoid errors)
     // TODO: Avoid memcpy - currently doing double value copying which is wasteful
     uint32_t* localsBuffer = (uint32_t *)malloc(localsVec.size() * sizeof(uint32_t));
     memcpy(localsBuffer, localsVec.data(), localsVec.size() * sizeof(uint32_t));
-    entry.locals = {
+    entry.locals.types = locals_types;
+    entry.locals.values = {
         .size = (uint32_t)localsVec.size(),
         .contents = localsBuffer,
     };
@@ -186,7 +203,8 @@ void _dumpStack(
     // Allocate buffer for stack
     uint32_t* stackBuffer = (uint32_t *)malloc(stackVec.size() * sizeof(uint32_t));
     memcpy(stackBuffer, stackVec.data(), stackVec.size() * sizeof(uint32_t));
-    entry.value_stack = {
+    entry.value_stack.types = stack_types;
+    entry.value_stack.values = {
         .size = (uint32_t)stackVec.size(),
         .contents = stackBuffer,
     };
@@ -249,13 +267,15 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
     }
 
     // Prepare entries array
-    BaseCallStackEntry entries[frameCount];
+    CallStackEntry entries[frameCount];
     auto currentPC = PC;
     
     // Process each frame for dumping
     for (size_t frameIndex = frameStack.size() - 1; frameIndex > 0; --frameIndex) {
         Runtime::StackManager::Frame frame = frameStack[frameIndex];
         const Runtime::Instance::ModuleInstance* modInst = frame.Module;
+        bool isTopFrame = (frameIndex == frameStack.size() - 1);
+        if (!isTopFrame) currentPC += 1;
 
         if (modInst == nullptr) {
             std::cerr << "Error: ModuleInstance is null for frame " << frameIndex << std::endl;
@@ -286,7 +306,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
         
         // Dump this frame using the pre-computed type stack
         size_t entryIndex = frameIndex - 1;  // Convert frame index to entry array index
-        _dumpStack(pc, localsPtr, valueStackPtr, ctrlStack, entries[entryIndex], typeStacks[frameIndex]);
+        _dumpStack(pc, localsPtr, valueStackPtr, ctrlStack, entries[entryIndex], typeStacks[frameIndex], isTopFrame);
         spdlog::info("Successfully dumped frame {}", frameIndex);
 
         // Update PC for next iteration
@@ -294,7 +314,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
     }
     
     // Checkpoint the complete stack
-    checkpoint_stack_v3(frameCount, entries);
+    checkpoint_stack_v4(frameCount, entries);
     spdlog::info("Stack dump completed successfully");
 }
   
