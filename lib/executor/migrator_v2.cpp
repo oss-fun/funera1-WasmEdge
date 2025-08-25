@@ -22,11 +22,20 @@ static constexpr uint8_t TYPE_S128 = 4;
 
 namespace WasmEdge {
 namespace Executor {
-    using M = Migrator;
+  using M = Migrator;
+  static bool checkpointFlag = false;
 
+  bool setCheckpointFlag(bool flag) {
+    checkpointFlag = flag;
+    return true;
+  }
+  bool getCheckpointFlag() {
+    return checkpointFlag;
+  }
 
-  std::vector<uint8_t> M::getTypeStackV2(uint32_t FuncIdx, uint32_t Offset) {
-    StackTable table = get_stack_table(FuncIdx, Offset);
+  std::vector<uint8_t> M::getTypeStackV2(uint32_t FuncIdx, uint32_t Offset, bool isTopFrame) {
+    uint32_t offset = (isTopFrame) ? Offset : Offset + 1;
+    StackTable table = get_stack_table(FuncIdx, offset);
     std::vector<uint8_t> TypeStack(table.size);
     for (size_t i = 0; i < table.size; i++) {
       StackTableEntry entry = table.data[i];
@@ -62,7 +71,7 @@ namespace Executor {
     Span<Byte> data = DataRes.value();
     
     // Checkpoint memory
-    checkpoint_memory(data.data(), page_size);
+    wasmig_checkpoint_memory(data.data(), page_size);
   }
 
   /// Convert a ValVariant value to uint32_t array representation for serialization
@@ -141,59 +150,69 @@ namespace Executor {
   }
 
 void _dumpStack(
-    Migrator &migrator,
-    Runtime::StackManager::Frame frame,
-    AST::InstrView::iterator PC, 
+    CodePos pc,
     ValVariant* localsPtr,
     ValVariant* valueStackPtr,
     std::vector<struct Migrator::CtrlInfo> &labelStack,
-    BaseCallStackEntry& entry
+    CallStackEntry& entry,
+    std::vector<uint8_t>& typeStack,
+    bool isFrameTop
 ) {
-    const Runtime::Instance::ModuleInstance* modInst = frame.Module;
     if (localsPtr == nullptr || valueStackPtr == nullptr) {
         std::cerr << "Error: LocalsPtr or ValueStackPtr is null" << std::endl;
         exit(1);
     }
     
     // Set program counter
-    auto [funcIdx, offset] = migrator.getInstrAddrExpr(modInst, PC);
-    entry.pc = CodePos{
-        .fidx = funcIdx,
-        .offset = offset,
-    };
-    spdlog::info("Setting PC to ({}, {})", funcIdx, offset);
+    entry.pc = pc;
+    spdlog::info("Setting PC to ({}, {})", pc.fidx, pc.offset);
     
     // Process locals
     // TODO: Convert from 128bit slot-size stack to 32bit stack
-    Array8 localTypes = get_local_types(funcIdx);
+    spdlog::info("Processing locals for function index {}", pc.fidx);
+    Array8 localTypes = get_local_types(pc.fidx);
     std::vector<uint32_t> localsVec;
     for (size_t i = 0; i < localTypes.size; i++) {
         uint8_t type = localTypes.contents[i];
         convertValueToUint32Array(localsVec, type, localsPtr[i]);
+    }
+
+    uint32_t offset = (isFrameTop) ? pc.offset : pc.offset + 1;
+    Array8 locals_types = get_local_types(pc.fidx);
+    StackTable stack_table = get_stack_table(pc.fidx, offset);
+    Array8 stack_types = convert_type_stack_from_stack_table(&stack_table);
+    
+    // debug
+    printf("[DEBUG] print types at (%d, %d):\n", pc.fidx, offset);
+    for (int i = 0; i < (int)locals_types.size; i++) {
+      printf("Local type at index %d: %d\n", i, locals_types.contents[i]);
+    }
+    for (int i = 0; i < (int)stack_types.size; i++) {
+      printf("Stack type at index %d: %d\n", i, stack_types.contents[i]);
     }
     
     // Allocate buffer for locals (malloc required to avoid errors)
     // TODO: Avoid memcpy - currently doing double value copying which is wasteful
     uint32_t* localsBuffer = (uint32_t *)malloc(localsVec.size() * sizeof(uint32_t));
     memcpy(localsBuffer, localsVec.data(), localsVec.size() * sizeof(uint32_t));
-    entry.locals = {
+    entry.locals.types = locals_types;
+    entry.locals.values = {
         .size = (uint32_t)localsVec.size(),
         .contents = localsBuffer,
     };
     spdlog::info("Set locals with {} elements", localsVec.size());
 
     // Process value stack
-    StackTable stackTable = get_stack_table(funcIdx, offset);
     std::vector<uint32_t> stackVec;
-    for (size_t i = 0; i < stackTable.size; i++) {
-        StackTableEntry stackEntry = stackTable.data[i];
-        convertValueToUint32Array(stackVec, stackEntry.ty, valueStackPtr[i]);
+    for (size_t i = 0; i < typeStack.size(); i++) {
+        convertValueToUint32Array(stackVec, typeStack[i], valueStackPtr[i]);
     }
     
     // Allocate buffer for stack
     uint32_t* stackBuffer = (uint32_t *)malloc(stackVec.size() * sizeof(uint32_t));
     memcpy(stackBuffer, stackVec.data(), stackVec.size() * sizeof(uint32_t));
-    entry.value_stack = {
+    entry.value_stack.types = stack_types;
+    entry.value_stack.values = {
         .size = (uint32_t)stackVec.size(),
         .contents = stackBuffer,
     };
@@ -232,45 +251,42 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
     
     spdlog::info("Starting stack dump with {} frames", frameCount);
     
-    // Build type stacks for each frame
+    // Build type stacks for each frame (skip frame 0 which is the dummy frame)
     AST::InstrView::iterator pcCopy = PC;
-    uint32_t stackIdx = 1;
-    for (size_t i = frameStack.size() - 1; i > 0; --i, ++stackIdx) {
-        auto frame = frameStack[i];
+    for (size_t frameIndex = frameStack.size() - 1; frameIndex > 0; --frameIndex) {
+        bool isTopFrame = (frameIndex == frameStack.size() - 1);
+        auto frame = frameStack[frameIndex];
         const Runtime::Instance::ModuleInstance* modInst = frame.Module;
         
-        // NOTE: Return address points to previous instruction, so +1
-        if (i != frameStack.size() - 1) {
-            pcCopy++;
-        }
-        
         auto [funcIdx, offset] = getInstrAddrExpr(modInst, pcCopy);
-        typeStacks[stackIdx] = getTypeStackV2(funcIdx, offset);
+        typeStacks[frameIndex] = getTypeStackV2(funcIdx, offset, isTopFrame);
         pcCopy = frame.From;
     }
 
-    // Build WAMR cell cumulative sums
+    // Build WAMR cell cumulative sums (process frames from bottom to top)
     uint32_t currentSum = 0;
     std::vector<uint32_t> wamrCellSums(StackMgr.size() + 1, 0);
-    for (uint32_t stackIdx = typeStacks.size() - 1; stackIdx > 0; --stackIdx) {
-        std::vector<uint8_t> typeStack = typeStacks[stackIdx];
-        for (uint32_t i = 0; i < typeStack.size(); i++) {
-            wamrCellSums[currentSum + 1] = wamrCellSums[currentSum] + typeStack[i];
+    for (size_t frameIndex = frameStack.size() - 1; frameIndex > 0; --frameIndex) {
+        std::vector<uint8_t>& typeStack = typeStacks[frameIndex];
+        for (size_t typeIndex = 0; typeIndex < typeStack.size(); typeIndex++) {
+            wamrCellSums[currentSum + 1] = wamrCellSums[currentSum] + typeStack[typeIndex];
             currentSum++;
         }
     }
 
     // Prepare entries array
-    BaseCallStackEntry entries[frameCount];
+    CallStackEntry entries[frameCount];
     auto currentPC = PC;
     
-    // Process each frame
-    for (size_t i = frameStack.size() - 1; i > 0; --i) {
-        Runtime::StackManager::Frame frame = frameStack[i];
+    // Process each frame for dumping
+    for (size_t frameIndex = frameStack.size() - 1; frameIndex > 0; --frameIndex) {
+        Runtime::StackManager::Frame frame = frameStack[frameIndex];
         const Runtime::Instance::ModuleInstance* modInst = frame.Module;
+        bool isTopFrame = (frameIndex == frameStack.size() - 1);
+        // if (!isTopFrame) currentPC += 1;
 
         if (modInst == nullptr) {
-            std::cerr << "Error: ModuleInstance is null for frame " << i << std::endl;
+            std::cerr << "Error: ModuleInstance is null for frame " << frameIndex << std::endl;
             exit(1);
         }
 
@@ -278,9 +294,9 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
         auto [currentFuncIdx, currentOffset] = getInstrAddrExpr(modInst, currentPC);
         CodePos pc = {
             .fidx = currentFuncIdx,
-            .offset = currentOffset+1,
+            .offset = currentOffset,
         };
-        spdlog::info("Processing frame {}: PC = ({}, {})", i, pc.fidx, pc.offset);
+        spdlog::info("Processing frame {}: PC = ({}, {}), OpCode: {}", frameIndex, pc.fidx, pc.offset, (currentPC)->getOpCode());
 
         // Calculate local and stack pointers
         uint32_t stackBottom = frame.VPos - frame.Locals;
@@ -296,16 +312,17 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
         Runtime::Instance::FunctionInstance* funcInst = funcResult.value();
         std::vector<struct CtrlInfo> ctrlStack = getCtrlStack(currentPC, funcInst, wamrCellSums);
         
-        // Dump this frame
-        _dumpStack(*this, frame, currentPC, localsPtr, valueStackPtr, ctrlStack, entries[i - 1]);
-        spdlog::info("Successfully dumped frame {}", i);
+        // Dump this frame using the pre-computed type stack
+        size_t entryIndex = frameIndex - 1;  // Convert frame index to entry array index
+        _dumpStack(pc, localsPtr, valueStackPtr, ctrlStack, entries[entryIndex], typeStacks[frameIndex], isTopFrame);
+        spdlog::info("Successfully dumped frame {}", frameIndex);
 
         // Update PC for next iteration
         currentPC = frame.From;
     }
     
     // Checkpoint the complete stack
-    checkpoint_stack_v3(frameCount, entries);
+    wasmig_checkpoint_stack_v4(frameCount, entries);
     spdlog::info("Stack dump completed successfully");
 }
   
@@ -314,7 +331,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
   /// ================
   void M::restoreMemoryV2(const Runtime::Instance::ModuleInstance* ModInst) {
     // ModInst->restoreMemInst(ImageDir);
-    Array8 data = restore_memory();
+    Array8 data = wasmig_restore_memory();
     if (data.size == 0) {
       std::cerr << "ERROR: restore_memory" << std::endl;
       exit(1);
@@ -346,7 +363,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
     const Runtime::Instance::ModuleInstance *Module = StackMgr.getModule();
     
     // restore stack
-    CallStack cs = restore_stack();
+    CallStack cs = wasmig_restore_stack();
     print_call_stack(&cs);
     
 
@@ -369,28 +386,28 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
       // uint32_t EnterFuncIdx;
       // ifs.read(reinterpret_cast<char *>(&EnterFuncIdx), sizeof(uint32_t));
       
-        auto ResPC = _restorePC(Module, entry.pc.fidx, entry.pc.offset);
-        if (!ResPC) {
-          return Unexpect(ResPC);
-        }
-        PC = ResPC.value();
-        // リターンアドレスは1つ前のアドレスを持っているので-1する
-        // if (I < LenFrame) PC--;
+      auto ResPC = _restorePC(Module, entry.pc.fidx, entry.pc.offset);
+      if (!ResPC) {
+        return Unexpect(ResPC);
+      }
+      PC = ResPC.value();
+      // WasmEdgeのリターンアドレスは1つ前のアドレスを持っているので-1する
+      // if (I < LenFrame) PC -= 1;
 
-        // ローカルと返り値の数
-        auto ResFunc = Module->getFunc(entry.pc.fidx);
-        if (!ResFunc) {
-          return Unexpect(ResFunc);
-        }
-        const Runtime::Instance::FunctionInstance* Func = ResFunc.value();
-        const auto &FuncType = Func->getFuncType();
-        const uint32_t ArgsN = static_cast<uint32_t>(FuncType.getParamTypes().size());
-        const uint32_t RetsN =
-            static_cast<uint32_t>(FuncType.getReturnTypes().size());
+      // ローカルと返り値の数
+      auto ResFunc = Module->getFunc(entry.pc.fidx);
+      if (!ResFunc) {
+        return Unexpect(ResFunc);
+      }
+      const Runtime::Instance::FunctionInstance* Func = ResFunc.value();
+      const auto &FuncType = Func->getFuncType();
+      const uint32_t ArgsN = static_cast<uint32_t>(FuncType.getParamTypes().size());
+      const uint32_t RetsN =
+          static_cast<uint32_t>(FuncType.getReturnTypes().size());
 
-        // TODO: Localsに対応する値をenterFunctionと対応してるか確認する
-        uint32_t Locals = ArgsN + Func->getLocalNum();
-        uint32_t VPos = StackMgr.size() + Locals;
+      // TODO: Localsに対応する値をenterFunctionと対応してるか確認する
+      uint32_t Locals = ArgsN + Func->getLocalNum();
+      uint32_t VPos = StackMgr.size() + Locals;
 
       // if (I == 0) From = PC; // 一番bottomのフレームのリターンアドレスはWasmEdge特有なので、それを使う
       // 先頭フレームはフレームスタックに入っていないのでpushしない

@@ -44,11 +44,14 @@ public:
   Migrator() {};
   ~Migrator() {};
 
+  // (Removed) checkpoint flag control functions were incorrectly declared as
+  // member functions. They are provided as free functions instead; see below.
+
   void Prepare(const Runtime::Instance::ModuleInstance* ModInst, std::string dirname);
   uint32_t getFuncIdx(const AST::InstrView::iterator PC);
   std::pair<uint32_t, uint32_t> getInstrAddrExpr(const Runtime::Instance::ModuleInstance *ModInst, AST::InstrView::iterator PC);
   std::vector<uint8_t> getTypeStack(uint32_t FuncIdx, uint32_t Offset, bool IsRetAddr);
-  std::vector<uint8_t> getTypeStackV2(uint32_t FuncIdx, uint32_t Offset);
+  std::vector<uint8_t> getTypeStackV2(uint32_t FuncIdx, uint32_t Offset, bool IsTopFrame);
   bool isExistTypeStackTable();
   bool isExistTypeStackTableV2();
 
@@ -86,6 +89,10 @@ private:
   Expect<AST::InstrView::iterator> _restoreIter(const Runtime::Instance::ModuleInstance* ModInst, uint32_t FuncIdx, uint32_t Offset);
   Expect<AST::InstrView::iterator> _restorePC(const Runtime::Instance::ModuleInstance* ModInst, uint32_t FuncIdx, uint32_t Offset);
 };
+
+// Global checkpoint flag helpers (free functions implemented in migrator_v2.cpp)
+bool setCheckpointFlag(bool flag);
+bool getCheckpointFlag();
 
 } // namespace Executor
 } // namespace WasmEdge

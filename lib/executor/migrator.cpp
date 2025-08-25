@@ -66,6 +66,11 @@ namespace Executor {
       AST::InstrView::iterator PCStart = FuncInst->getInstrs().begin();
       uint32_t Offset = PC->getOffset() - PCStart->getOffset();
 
+      // debug
+      std::cerr << "[DEBUG] (FuncIdx, Offset) = (" << FuncIdx << ", " << Offset << ")" << std::endl;
+      std::cerr << "[DEBUG] (PC->Offset, PCStart->Offset) = (" << PC->getOffset() << ", " << PCStart->getOffset() << ")" << std::endl;
+      std::cerr << "[DEBUG] (OpCode) = (" << OpCodeStr[PC->getOpCode()] << ", " << OpCodeStr[PCStart->getOpCode()] << ")" << std::endl;
+
       return std::make_pair(FuncIdx, Offset);
   }
 
@@ -374,7 +379,8 @@ namespace Executor {
   // 命令と引数が混在したOffsetの復元
   Expect<AST::InstrView::iterator> M::_restorePC(const Runtime::Instance::ModuleInstance* ModInst, uint32_t FuncIdx, uint32_t Offset) {
     assert(ModInst != nullptr);
-    
+    std::cout << "[restorePC] (FuncIdx, Offset) = (" << FuncIdx << ", " << Offset << ")" << std::endl;
+
     auto Res = ModInst->getFunc(FuncIdx);
     if (unlikely(!Res)) {
       // spdlog::error(ErrInfo::InfoAST(ASTNodeAttr::Seg_Element));
@@ -389,14 +395,17 @@ namespace Executor {
     // 与えられたOffsetは関数の先頭からの相対オフセットなので、先頭アドレス分を足す
     Offset += PC->getOffset();
 
-    uint32_t PCOfs = 0;
-    while (PCOfs < Offset) {
-      PCOfs = PC->getOffset();
-      if (PCOfs == Offset) {
+    for (; PC->getOffset() <= Offset; PC++) {
+      // OpCode op = PC->getOpCode();
+      // std::string_view op_str = OpCodeStr[op];
+      // std::cout << "[restorePC] (PCOfs, Offset, Opcode) = (" << PC->getOffset() << ", " << Offset << ", " << op_str << ")" << std::endl;
+      if (PC->getOffset() == Offset) {
         return PC;
       }
-      PC++;
     }
+    // OpCode op = PC->getOpCode();
+    // std::string_view op_str = OpCodeStr[op];
+    // std::cout << "[restorePC] (PCOfs, Offset, Opcode) = (" << PC->getOffset() << ", " << Offset << ", " << op_str << ")" << std::endl;
 
     // ここまで来たらエラー
     std::cerr << "[WARN] The offset of program_counter.img is incorrect" << std::endl;

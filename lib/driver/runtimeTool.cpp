@@ -7,6 +7,7 @@
 #include "common/types.h"
 #include "common/version.h"
 #include "driver/tool.h"
+#include "executor/migrator.h"
 #include "host/wasi/wasimodule.h"
 #include "vm/vm.h"
 
@@ -20,6 +21,11 @@
 
 namespace WasmEdge {
 namespace Driver {
+
+void signalHandler(int signum) {
+  // NOTE: DumpFlag = 1としたいが、WasmEdgeのlinterが関数の引数を使わないコードを許さないので、DumpFlag = signum|1としている
+  WasmEdge::Executor::setCheckpointFlag(signum | 1);
+}
 
 int Tool(struct DriverToolOptions &Opt) noexcept {
   using namespace std::literals;
@@ -200,6 +206,14 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
       Opt.Args.value(), Opt.Env.value());
 
   if (EnterCommandMode) {
+
+    // signal handler
+    std::cerr << "Setting up signal handler for SIGINT\n";
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = signalHandler;
+    sigaction(SIGINT, &sa, nullptr);
+
     // command mode
     auto AsyncResult = VM.asyncExecute("_start"sv);
     if (Timeout.has_value()) {
