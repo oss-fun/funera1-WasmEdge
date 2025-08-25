@@ -196,7 +196,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       return Unexpect(ErrCode::Value::Unreachable);
     case OpCode::Nop:
       if (char* env = getenv("NOP_CKPT"); env && (std::string(env) == "1")) {
-        DumpFlag = 1;
+        setCheckpointFlag(1);
         auto [FuncIdx, Offset] = Migr.getInstrAddrExpr(StackMgr.getModule(), PC);
         spdlog::info("Nop checkpoint at FuncIdx: {}, Offset: {}", FuncIdx, Offset);
       }

@@ -71,8 +71,6 @@ namespace Executor {
       std::cerr << "[DEBUG] (PC->Offset, PCStart->Offset) = (" << PC->getOffset() << ", " << PCStart->getOffset() << ")" << std::endl;
       std::cerr << "[DEBUG] (OpCode) = (" << OpCodeStr[PC->getOpCode()] << ", " << OpCodeStr[PCStart->getOpCode()] << ")" << std::endl;
 
-
-
       return std::make_pair(FuncIdx, Offset);
   }
 

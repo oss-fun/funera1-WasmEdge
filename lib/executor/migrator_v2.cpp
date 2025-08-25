@@ -71,7 +71,7 @@ namespace Executor {
     Span<Byte> data = DataRes.value();
     
     // Checkpoint memory
-    checkpoint_memory(data.data(), page_size);
+    wasmig_checkpoint_memory(data.data(), page_size);
   }
 
   /// Convert a ValVariant value to uint32_t array representation for serialization
@@ -322,7 +322,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
     }
     
     // Checkpoint the complete stack
-    checkpoint_stack_v4(frameCount, entries);
+    wasmig_checkpoint_stack_v4(frameCount, entries);
     spdlog::info("Stack dump completed successfully");
 }
   
@@ -331,7 +331,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
   /// ================
   void M::restoreMemoryV2(const Runtime::Instance::ModuleInstance* ModInst) {
     // ModInst->restoreMemInst(ImageDir);
-    Array8 data = restore_memory();
+    Array8 data = wasmig_restore_memory();
     if (data.size == 0) {
       std::cerr << "ERROR: restore_memory" << std::endl;
       exit(1);
@@ -363,7 +363,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
     const Runtime::Instance::ModuleInstance *Module = StackMgr.getModule();
     
     // restore stack
-    CallStack cs = restore_stack();
+    CallStack cs = wasmig_restore_stack();
     print_call_stack(&cs);
     
 
