@@ -50,6 +50,15 @@ namespace Executor {
     ImageDir = dirname;
 
     BaseModName = ModInst->getModuleName();
+    
+    // Load stack table
+      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+      } else {
+          if (load_stack_tables() == 0) {
+            spdlog::error("Not found stack tables");
+            exit(1);
+          }
+      }
   }
   
   uint32_t M::getFuncIdx(const AST::InstrView::iterator PC) {
@@ -67,9 +76,9 @@ namespace Executor {
       uint32_t Offset = PC->getOffset() - PCStart->getOffset();
 
       // debug
-      std::cerr << "[DEBUG] (FuncIdx, Offset) = (" << FuncIdx << ", " << Offset << ")" << std::endl;
-      std::cerr << "[DEBUG] (PC->Offset, PCStart->Offset) = (" << PC->getOffset() << ", " << PCStart->getOffset() << ")" << std::endl;
-      std::cerr << "[DEBUG] (OpCode) = (" << OpCodeStr[PC->getOpCode()] << ", " << OpCodeStr[PCStart->getOpCode()] << ")" << std::endl;
+      // std::cerr << "[DEBUG] (FuncIdx, Offset) = (" << FuncIdx << ", " << Offset << ")" << std::endl;
+      // std::cerr << "[DEBUG] (PC->Offset, PCStart->Offset) = (" << PC->getOffset() << ", " << PCStart->getOffset() << ")" << std::endl;
+      // std::cerr << "[DEBUG] (OpCode) = (" << OpCodeStr[PC->getOpCode()] << ", " << OpCodeStr[PCStart->getOpCode()] << ")" << std::endl;
 
       return std::make_pair(FuncIdx, Offset);
   }
@@ -360,9 +369,9 @@ namespace Executor {
     auto Res = ModInst->getFunc(FuncIdx);
     if (unlikely(!Res)) {
       // spdlog::error(ErrInfo::InfoAST(ASTNodeAttr::Seg_Element));
-      std::cout << "\x1b[31m";
-      std::cout << "ERROR: _restoreIter" << std::endl;
-      std::cout << "\x1b[1m";
+      // std::cout << "\x1b[31m";
+      // std::cout << "ERROR: _restoreIter" << std::endl;
+      // std::cout << "\x1b[1m";
       return Unexpect(Res);
     }
     Runtime::Instance::FunctionInstance* FuncInst = Res.value();
@@ -379,7 +388,7 @@ namespace Executor {
   // 命令と引数が混在したOffsetの復元
   Expect<AST::InstrView::iterator> M::_restorePC(const Runtime::Instance::ModuleInstance* ModInst, uint32_t FuncIdx, uint32_t Offset) {
     assert(ModInst != nullptr);
-    std::cout << "[restorePC] (FuncIdx, Offset) = (" << FuncIdx << ", " << Offset << ")" << std::endl;
+    // std::cout << "[restorePC] (FuncIdx, Offset) = (" << FuncIdx << ", " << Offset << ")" << std::endl;
 
     auto Res = ModInst->getFunc(FuncIdx);
     if (unlikely(!Res)) {

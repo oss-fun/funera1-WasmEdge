@@ -165,11 +165,11 @@ void _dumpStack(
     
     // Set program counter
     entry.pc = pc;
-    spdlog::info("Setting PC to ({}, {})", pc.fidx, pc.offset);
+    // spdlog::info("Setting PC to ({}, {})", pc.fidx, pc.offset);
     
     // Process locals
     // TODO: Convert from 128bit slot-size stack to 32bit stack
-    spdlog::info("Processing locals for function index {}", pc.fidx);
+    // spdlog::info("Processing locals for function index {}", pc.fidx);
     Array8 localTypes = get_local_types(pc.fidx);
     std::vector<uint32_t> localsVec;
     for (size_t i = 0; i < localTypes.size; i++) {
@@ -183,13 +183,13 @@ void _dumpStack(
     Array8 stack_types = convert_type_stack_from_stack_table(&stack_table);
     
     // debug
-    printf("[DEBUG] print types at (%d, %d):\n", pc.fidx, offset);
-    for (int i = 0; i < (int)locals_types.size; i++) {
-      printf("Local type at index %d: %d\n", i, locals_types.contents[i]);
-    }
-    for (int i = 0; i < (int)stack_types.size; i++) {
-      printf("Stack type at index %d: %d\n", i, stack_types.contents[i]);
-    }
+    // printf("[DEBUG] print types at (%d, %d):\n", pc.fidx, offset);
+    // for (int i = 0; i < (int)locals_types.size; i++) {
+    //   printf("Local type at index %d: %d\n", i, locals_types.contents[i]);
+    // }
+    // for (int i = 0; i < (int)stack_types.size; i++) {
+    //   printf("Stack type at index %d: %d\n", i, stack_types.contents[i]);
+    // }
     
     // Allocate buffer for locals (malloc required to avoid errors)
     // TODO: Avoid memcpy - currently doing double value copying which is wasteful
@@ -200,7 +200,7 @@ void _dumpStack(
         .size = (uint32_t)localsVec.size(),
         .contents = localsBuffer,
     };
-    spdlog::info("Set locals with {} elements", localsVec.size());
+    // spdlog::info("Set locals with {} elements", localsVec.size());
 
     // Process value stack
     std::vector<uint32_t> stackVec;
@@ -216,7 +216,7 @@ void _dumpStack(
         .size = (uint32_t)stackVec.size(),
         .contents = stackBuffer,
     };
-    spdlog::info("Set value stack with {} elements", stackVec.size());
+    // spdlog::info("Set value stack with {} elements", stackVec.size());
 
     // Process label stack
     uint32_t labelStackSize = labelStack.size();
@@ -240,7 +240,7 @@ void _dumpStack(
         .stack_pointers = stackPointers,
         .cell_nums = cellNums,
     };
-    spdlog::info("Set label stack with {} elements", labelStackSize);
+    // spdlog::info("Set label stack with {} elements", labelStackSize);
 }
 
 void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC) {
@@ -249,7 +249,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
     std::vector<std::vector<uint8_t>> typeStacks(frameStack.size());
     size_t frameCount = frameStack.size() - 1;
     
-    spdlog::info("Starting stack dump with {} frames", frameCount);
+    // spdlog::info("Starting stack dump with {} frames", frameCount);
     
     // Build type stacks for each frame (skip frame 0 which is the dummy frame)
     AST::InstrView::iterator pcCopy = PC;
@@ -296,7 +296,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
             .fidx = currentFuncIdx,
             .offset = currentOffset,
         };
-        spdlog::info("Processing frame {}: PC = ({}, {}), OpCode: {}", frameIndex, pc.fidx, pc.offset, (currentPC)->getOpCode());
+        // spdlog::info("Processing frame {}: PC = ({}, {}), OpCode: {}", frameIndex, pc.fidx, pc.offset, (currentPC)->getOpCode());
 
         // Calculate local and stack pointers
         uint32_t stackBottom = frame.VPos - frame.Locals;
@@ -315,7 +315,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
         // Dump this frame using the pre-computed type stack
         size_t entryIndex = frameIndex - 1;  // Convert frame index to entry array index
         _dumpStack(pc, localsPtr, valueStackPtr, ctrlStack, entries[entryIndex], typeStacks[frameIndex], isTopFrame);
-        spdlog::info("Successfully dumped frame {}", frameIndex);
+        // spdlog::info("Successfully dumped frame {}", frameIndex);
 
         // Update PC for next iteration
         currentPC = frame.From;
@@ -323,7 +323,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
     
     // Checkpoint the complete stack
     wasmig_checkpoint_stack_v4(frameCount, entries);
-    spdlog::info("Stack dump completed successfully");
+    // spdlog::info("Stack dump completed successfully");
 }
   
   /// ================
@@ -366,7 +366,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
     
     // restore stack
     CallStack cs = wasmig_restore_stack();
-    print_call_stack(&cs);
+    // print_call_stack(&cs);
     
 
     uint32_t LenFrame = cs.size;
@@ -381,7 +381,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
     // for (size_t I = LenFrame; I > 0; --I) {
     for (size_t I = 0; I < LenFrame; ++I) {
       CallStackEntry entry = cs.entries[I];
-      spdlog::info("{}th pc = ({}, {})", I, entry.pc.fidx, entry.pc.offset);
+      // spdlog::info("{}th pc = ({}, {})", I, entry.pc.fidx, entry.pc.offset);
       // ifs.open(ImageDir + "stack" + std::to_string(I) + ".img", std::ios::binary);
 
       // 関数インデックスのロード

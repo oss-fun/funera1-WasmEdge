@@ -471,12 +471,12 @@ public:
     // Restore DataPtr
     // 環境変数RESTORE_MEM_TYPE=allの場合、restoreDataPtrを実行. 通常時は、restoreDitryMemoryを実行
     if (std::getenv("RESTORE_MEM_TYPE") && std::string(std::getenv("RESTORE_MEM_TYPE")) == "all") {
-      std::cerr << "[DEBUG] restoreDataPtr" << std::endl;
+      // std::cerr << "[DEBUG] restoreDataPtr" << std::endl;
       if (auto Res = restoreAllMemory(filename); !Res) {
         return Unexpect(Res);
       }
     } else {
-      std::cerr << "[DEBUG] restoreDirtyMemory" << std::endl;
+      // std::cerr << "[DEBUG] restoreDirtyMemory" << std::endl;
       if (auto Res = restoreDirtyMemory(filename); !Res) {
         return Unexpect(Res);
       }

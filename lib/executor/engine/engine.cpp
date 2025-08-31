@@ -2320,7 +2320,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       setCheckpointFlag(0);
 
       // Restore
-      Migr.Prepare(StackMgr.getModule(), Conf.getStatisticsConfigure().getImageDir());
+      // Migr.Prepare(StackMgr.getModule(), Conf.getStatisticsConfigure().getImageDir());
       Migr.restoreMemoryV2(StackMgr.getModule());
       Migr.restoreGlobal(StackMgr.getModule());
       auto Res = Migr.restoreProgramCounter(StackMgr.getModule());
