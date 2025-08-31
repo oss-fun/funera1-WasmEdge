@@ -20,14 +20,15 @@ int64_t getTime(timespec ts1) {
 }
 
 int UniTool(int Argc, const char *Argv[], const ToolType ToolSelect) noexcept {
+  // print boot start
+  struct timespec ts1;
+  clock_gettime(CLOCK_MONOTONIC, &ts1);
+  fprintf(stderr, "boot_start, %lu\n", (uint64_t)(ts1.tv_sec*1e9) + ts1.tv_nsec);
+
   using namespace std::literals;
 
   std::ios::sync_with_stdio(false);
   Log::setInfoLoggingLevel();
-
-  struct timespec ts1;
-  clock_gettime(CLOCK_MONOTONIC, &ts1);
-  std::cerr << "boot_start, " << getTime(ts1) << std::endl;
 
   auto Parser = PO::ArgumentParser();
 

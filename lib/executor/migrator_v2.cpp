@@ -362,6 +362,8 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
   Expect<void> M::restoreStackV2(Runtime::StackManager& StackMgr) {
     const Runtime::Instance::ModuleInstance *Module = StackMgr.getModule();
     
+    StackMgr.reset();
+    
     // restore stack
     CallStack cs = wasmig_restore_stack();
     print_call_stack(&cs);
@@ -375,7 +377,7 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
 
     AST::InstrView::iterator PC, From;
     // LenFrame-1から始まるのは、Stack{LenFrame}.imgがダミーフレームだから
-    From = StackMgr.popFrame();
+    // From = StackMgr.popFrame();
     // for (size_t I = LenFrame; I > 0; --I) {
     for (size_t I = 0; I < LenFrame; ++I) {
       CallStackEntry entry = cs.entries[I];

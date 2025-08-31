@@ -212,7 +212,7 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = signalHandler;
-    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGUSR1, &sa, nullptr);
 
     // command mode
     auto AsyncResult = VM.asyncExecute("_start"sv);

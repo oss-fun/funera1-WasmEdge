@@ -139,6 +139,11 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       RestoreFlag = false;
     }
 
+    // print boot end
+    struct timespec ts1;
+    clock_gettime(CLOCK_MONOTONIC, &ts1);
+    fprintf(stderr, "boot_end, %lu\n", (uint64_t)(ts1.tv_sec*1e9) + ts1.tv_nsec);
+
     // If not terminated, execute the instructions in interpreter mode.
     // For the entering AOT or host functions, the `StartIt` is equal to the end
     // of instruction list, therefore the execution will return immediately.
@@ -2302,7 +2307,33 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;
       // std::cerr << "Success dumpStack" << std::endl;
-      return {};
+      
+      // Clean flag
+      setCheckpointFlag(0);
+
+      // 自分自身に SIGTSTP を送信
+      pid_t pid = getpid();
+      if (kill(pid, SIGTSTP) != 0) {
+          perror("kill");
+          return {};
+      }
+      setCheckpointFlag(0);
+
+      // Restore
+      Migr.Prepare(StackMgr.getModule(), Conf.getStatisticsConfigure().getImageDir());
+      Migr.restoreMemoryV2(StackMgr.getModule());
+      Migr.restoreGlobal(StackMgr.getModule());
+      auto Res = Migr.restoreProgramCounter(StackMgr.getModule());
+      if (!Res) {
+        return Unexpect(Res);
+      }
+      PC = Res.value();
+      // StartIt += 1; // 保存は、前の命令と対応づけているので、復元時に+1
+      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+        Migr.restoreStackV1(StackMgr);
+      } else {
+        Migr.restoreStackV2(StackMgr);
+      }
     }
 
     PC++;
