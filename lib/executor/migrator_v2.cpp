@@ -10,6 +10,10 @@
 #include <wasmig/migration.h>
 #include <wasmig/stack_tables.h>
 #include <wasmig/state.h>
+#include <wasmig/table_v3.h>
+#include <wasmig/registry.h>
+#include <wasmig/log.h>
+#include <wasmig/stack.h>
 
 namespace fs = std::filesystem;
 
@@ -74,257 +78,345 @@ namespace Executor {
     wasmig_checkpoint_memory(data.data(), page_size);
   }
 
-  /// Convert a ValVariant value to uint32_t array representation for serialization
-  void convertValueToUint32Array(std::vector<uint32_t>& targetArray, uint8_t valueType, const ValVariant& value) {
-      switch (valueType) {
-        case TYPE_S32:
-          {
-            targetArray.push_back(value.get<uint32_t>());
-            break;
-          }
-        case TYPE_S64:
-          {
-            // Pack 64-bit value into two 32-bit values: [low_bits, high_bits]
-            int64_t val64 = value.get<int64_t>();
-            uint32_t lowBits = static_cast<uint32_t>(val64 & 0xFFFFFFFFLL);
-            uint32_t highBits = static_cast<uint32_t>((val64 >> 32) & 0xFFFFFFFFLL);
-            targetArray.push_back(lowBits);
-            targetArray.push_back(highBits);
-            break;
-          }
-        case TYPE_S128:
-          {
-            std::cerr << "Error: V128 type is not supported in migration" << std::endl;
-            exit(1);
-          }
-        default:
-          {
-            std::cerr << "Error: Unknown value type in conversion: " << static_cast<int>(valueType) << std::endl;
-            exit(1);
-          }
-      }
-  }
+  // /// Convert a ValVariant value to uint32_t array representation for serialization
+  // void convertValueToUint32Array(std::vector<uint32_t>& targetArray, uint8_t valueType, const ValVariant& value) {
+  //     switch (valueType) {
+  //       case TYPE_S32:
+  //         {
+  //           targetArray.push_back(value.get<uint32_t>());
+  //           break;
+  //         }
+  //       case TYPE_S64:
+  //         {
+  //           // Pack 64-bit value into two 32-bit values: [low_bits, high_bits]
+  //           int64_t val64 = value.get<int64_t>();
+  //           uint32_t lowBits = static_cast<uint32_t>(val64 & 0xFFFFFFFFLL);
+  //           uint32_t highBits = static_cast<uint32_t>((val64 >> 32) & 0xFFFFFFFFLL);
+  //           targetArray.push_back(lowBits);
+  //           targetArray.push_back(highBits);
+  //           break;
+  //         }
+  //       case TYPE_S128:
+  //         {
+  //           std::cerr << "Error: V128 type is not supported in migration" << std::endl;
+  //           exit(1);
+  //         }
+  //       default:
+  //         {
+  //           std::cerr << "Error: Unknown value type in conversion: " << static_cast<int>(valueType) << std::endl;
+  //           exit(1);
+  //         }
+  //     }
+  // }
 
-  /// Restore values from uint32_t array representation back to the stack manager
-  void restoreValuesFromUint32Array(Runtime::StackManager& stackManager, TypedArray serializedArray) {
-    size_t arrayIndex = 0;
+  // /// Restore values from uint32_t array representation back to the stack manager
+  // void restoreValuesFromUint32Array(Runtime::StackManager& stackManager, TypedArray serializedArray) {
+  //   size_t arrayIndex = 0;
     
-    for (size_t typeIndex = 0; typeIndex < serializedArray.types.size; typeIndex++) {
-      uint8_t valueType = serializedArray.types.contents[typeIndex];
+  //   for (size_t typeIndex = 0; typeIndex < serializedArray.types.size; typeIndex++) {
+  //     uint8_t valueType = serializedArray.types.contents[typeIndex];
       
-      switch (valueType) {
-        case TYPE_S32:
-          {
-            if (arrayIndex >= serializedArray.values.size) {
-              std::cerr << "Error: Array index out of bounds during S32 restoration" << std::endl;
-              exit(1);
-            }
-            stackManager.push(serializedArray.values.contents[arrayIndex++]);
-            break;
-          }
-        case TYPE_S64:
-          {
-            if (arrayIndex + 1 >= serializedArray.values.size) {
-              std::cerr << "Error: Array index out of bounds during S64 restoration" << std::endl;
-              exit(1);
-            }
-            // Unpack two 32-bit values back into 64-bit: [low_bits, high_bits]
-            uint32_t lowBits = serializedArray.values.contents[arrayIndex++];
-            uint32_t highBits = serializedArray.values.contents[arrayIndex++];
-            int64_t val64 = (static_cast<int64_t>(highBits) << 32) | static_cast<int64_t>(lowBits);
-            stackManager.push(val64);
-            break;
-          }
-        case TYPE_S128:
-          {
-            std::cerr << "Error: V128 type is not supported in migration" << std::endl;
-            exit(1);
-          }
-        default:
-          {
-            std::cerr << "Error: Unknown value type in restoration: " << static_cast<int>(valueType) << std::endl;
-            exit(1);
-          }
-      }
+  //     switch (valueType) {
+  //       case TYPE_S32:
+  //         {
+  //           if (arrayIndex >= serializedArray.values.size) {
+  //             std::cerr << "Error: Array index out of bounds during S32 restoration" << std::endl;
+  //             exit(1);
+  //           }
+  //           stackManager.push(serializedArray.values.contents[arrayIndex++]);
+  //           break;
+  //         }
+  //       case TYPE_S64:
+  //         {
+  //           if (arrayIndex + 1 >= serializedArray.values.size) {
+  //             std::cerr << "Error: Array index out of bounds during S64 restoration" << std::endl;
+  //             exit(1);
+  //           }
+  //           // Unpack two 32-bit values back into 64-bit: [low_bits, high_bits]
+  //           uint32_t lowBits = serializedArray.values.contents[arrayIndex++];
+  //           uint32_t highBits = serializedArray.values.contents[arrayIndex++];
+  //           int64_t val64 = (static_cast<int64_t>(highBits) << 32) | static_cast<int64_t>(lowBits);
+  //           stackManager.push(val64);
+  //           break;
+  //         }
+  //       case TYPE_S128:
+  //         {
+  //           std::cerr << "Error: V128 type is not supported in migration" << std::endl;
+  //           exit(1);
+  //         }
+  //       default:
+  //         {
+  //           std::cerr << "Error: Unknown value type in restoration: " << static_cast<int>(valueType) << std::endl;
+  //           exit(1);
+  //         }
+  //     }
+  //   }
+  // }
+
+  bool materialize_stack_values(Stack addr_stack, Stack type_stack, ValVariant* raw_stack,
+                                uint8_t* type_buf, uint32_t* value_buf, 
+                                uint32_t stack_count, uint32_t stack_size) {
+    uint32_t stack_ptr = 0;
+    StackIterator addr_it = wasmig_stack_iterator_create(addr_stack);
+    StackIterator type_it = wasmig_stack_iterator_create(type_stack);
+    if (!addr_it || !type_it) {
+        wasmig_error("failed to create stack iterators\n");
+        if (addr_it) wasmig_stack_iterator_destroy(addr_it);
+        if (type_it) wasmig_stack_iterator_destroy(type_it);
+        return false;
     }
+
+    stack_ptr = stack_size;
+    uint32_t index = 0;
+    while (wasmig_stack_iterator_has_next(addr_it) && wasmig_stack_iterator_has_next(type_it)) {
+        index++;
+        uint64_t address = wasmig_stack_iterator_next(addr_it);
+        uint32_t type = (uint32_t)wasmig_stack_iterator_next(type_it);
+
+        type_buf[stack_count - index] = type;
+        stack_ptr -= type;
+
+        // that is a case if value is in register
+        switch (type) {
+            case 1: // i32
+            {
+                wasmig_debug("reconstruct stack[%u]: i32 %u\n", stack_ptr, (uint32_t)address);
+                uint32_t value = (uint32_t)raw_stack[(size_t)address];   // indexをsize_tに
+                value_buf[stack_ptr] = value;
+                wasmig_debug("value_buf[%u]: %u\n", stack_ptr, value);
+                break;
+            }
+            case 2: // i64
+            {
+                wasmig_debug("reconstruct stack[%u]: i64 %u\n", stack_ptr, (uint64_t)address);
+                value_buf[stack_ptr]   = (uint32_t)raw_stack[(size_t)address];
+                value_buf[stack_ptr+1] = (uint32_t)raw_stack[(size_t)address + 1];
+                break;
+            }
+            default:
+                wasmig_error("unknown type: %d\n", type);
+                break;
+        }
+    }
+    wasmig_stack_iterator_destroy(addr_it);
+    wasmig_stack_iterator_destroy(type_it);
+    return true;
   }
 
-void _dumpStack(
-    CodePos pc,
-    ValVariant* localsPtr,
-    ValVariant* valueStackPtr,
-    std::vector<struct Migrator::CtrlInfo> &labelStack,
-    CallStackEntry& entry,
-    std::vector<uint8_t>& typeStack,
-    bool isFrameTop
-) {
-    if (localsPtr == nullptr || valueStackPtr == nullptr) {
-        std::cerr << "Error: LocalsPtr or ValueStackPtr is null" << std::endl;
+  // calculate stack and locals size. stack size has all entries including local size.
+  bool calc_stack_and_local_entries(Stack type_stack, uint32_t locals_count,
+                          uint32_t* out_stack_count,
+                          uint32_t* out_stack_size,
+                          uint32_t* out_locals_size) {
+      uint32_t stack_count = 0;
+      uint32_t stack_size  = 0;
+      uint32_t locals_size = 0;
+
+      // if (locals_count == 0) {
+      //     locals_count = 0; // 0なら無視する
+      // }
+
+      // リングバッファで末尾 locals_count 個を保持
+      uint32_t *ring = (uint32_t *)((locals_count>0) ? malloc(sizeof(uint32_t) * locals_count) : NULL);
+      uint32_t idx = 0;
+
+      StackIterator it = wasmig_stack_iterator_create(type_stack);
+      if (!it) {
+          free(ring);
+          wasmig_error("failed to create type iterator\n");
+          return false;
+      }
+
+      while (wasmig_stack_iterator_has_next(it)) {
+          uint32_t val = (uint32_t)wasmig_stack_iterator_next(it);
+          stack_count++;
+          stack_size += val;
+
+          if (locals_count) {
+              ring[idx % locals_count] = val;
+              idx++;
+          }
+      }
+      wasmig_stack_iterator_destroy(it);
+
+      // locals の和を計算
+      if (locals_count) {
+          uint32_t take = (stack_count < locals_count) ? stack_count : locals_count;
+          for (uint32_t i = 0; i < take; i++) {
+              locals_size += ring[(idx - take + i) % locals_count];
+          }
+      }
+
+      free(ring);
+
+      if (out_stack_count) *out_stack_count = stack_count;
+      if (out_stack_size)  *out_stack_size  = stack_size;
+      if (out_locals_size) *out_locals_size = locals_size;
+      
+      return true;
+  }
+
+  
+  static bool
+  _setup_value_stacks(
+    Runtime::StackManager::Frame frame,
+    ValVariant* raw_stack, 
+    CodePos pc, 
+    bool isFrameTop,
+    TypedArray *out_locals, 
+    TypedArray *out_value_stack)
+  {
+      // wasmig_info("fidx: %d, offset: %d\n", call_pos.fidx, call_pos.offset);
+      if (!isFrameTop)
+          pc.offset += 1;
+
+    Stack addr_stack, type_stack;
+    if (!load_metadata_stacks(pc.fidx, pc.offset, &addr_stack, &type_stack))
+        return false;
+
+    uint32_t local_count = frame.Locals;
+    uint32_t stack_size, stack_count, local_size;
+    if (!calc_stack_and_local_entries(type_stack, local_count, &stack_count, &stack_size, &local_size)) {
+        wasmig_error("failed count_stack_entries");
+        return false;
+    }
+    wasmig_info("stack_count=%d, stack_size=%d\n", stack_count, stack_size);
+    wasmig_info("local_count=%d, local_size=%d\n", local_count, local_size);
+
+    uint8_t* type_buf = (uint8_t *)malloc(stack_size * sizeof(uint8_t));
+    uint32_t* value_buf = (uint32_t *)malloc(stack_size * sizeof(uint32_t));
+    if (!materialize_stack_values(addr_stack, type_stack, raw_stack, type_buf, value_buf, stack_count, stack_size))
+        return false;
+
+      // // Array8 locals_types = get_local_types(pc.fidx);
+      // // StackTable stack_table = get_stack_table(pc.fidx, offset);
+      // // Array8 stack_types = convert_type_stack_from_stack_table(&stack_table);
+      
+      // // Allocate buffer for locals (malloc required to avoid errors)
+      // // TODO: Avoid memcpy - currently doing double value copying which is wasteful
+      // uint32_t* localsBuffer = (uint32_t *)malloc(localsVec.size() * sizeof(uint32_t));
+      // memcpy(localsBuffer, localsVec.data(), localsVec.size() * sizeof(uint32_t));
+      // out_locals->types = locals_types;
+      // out_locals->values = {
+      //     .size = (uint32_t)localsVec.size(),
+      //     .contents = localsBuffer,
+      // };
+
+      // // Process value stack
+      // std::vector<uint32_t> stackVec;
+      // for (size_t i = 0; i < typeStack.size(); i++) {
+      //     convertValueToUint32Array(stackVec, typeStack[i], valueStackPtr[i]);
+      // }
+      
+      // // Allocate buffer for stack
+      // uint32_t* stackBuffer = (uint32_t *)malloc(stackVec.size() * sizeof(uint32_t));
+      // memcpy(stackBuffer, stackVec.data(), stackVec.size() * sizeof(uint32_t));
+      // out_value_stack->types = stack_types;
+      // out_value_stack->values = {
+      //     .size = (uint32_t)stackVec.size(),
+      //     .contents = stackBuffer,
+      // };
+      // spdlog::info("Set value stack with {} elements", stackVec.size());
+
+      // pack the stack
+      out_locals->types = (Array8){local_count, type_buf};
+      out_locals->values = (Array32){local_size, value_buf};
+      out_value_stack->types = (Array8){stack_count - local_count, type_buf + local_count};
+      out_value_stack->values = (Array32){stack_size - local_size, value_buf + local_size};
+      
+      // print log
+      wasmig_info("locals: {count=%d, size=%d}\n", local_count, local_size);
+      wasmig_info("value_stack: {count=%d, size=%d}\n", stack_count - local_count, stack_size - local_size);
+
+      return true;
+  }
+
+  void _dumpStack(
+      Runtime::StackManager::Frame frame,
+      CodePos pc,
+      ValVariant* raw_stack,
+      CallStackEntry& entry,
+      bool isFrameTop
+  ) {
+    if (raw_stack == nullptr) {
+        std::cerr << "Error: Raw stack is null" << std::endl;
         exit(1);
     }
     
     // Set program counter
     entry.pc = pc;
-    // spdlog::info("Setting PC to ({}, {})", pc.fidx, pc.offset);
-    
-    // Process locals
-    // TODO: Convert from 128bit slot-size stack to 32bit stack
-    // spdlog::info("Processing locals for function index {}", pc.fidx);
-    Array8 localTypes = get_local_types(pc.fidx);
-    std::vector<uint32_t> localsVec;
-    for (size_t i = 0; i < localTypes.size; i++) {
-        uint8_t type = localTypes.contents[i];
-        convertValueToUint32Array(localsVec, type, localsPtr[i]);
-    }
 
-    uint32_t offset = (isFrameTop) ? pc.offset : pc.offset + 1;
-    Array8 locals_types = get_local_types(pc.fidx);
-    StackTable stack_table = get_stack_table(pc.fidx, offset);
-    Array8 stack_types = convert_type_stack_from_stack_table(&stack_table);
+    // Setup a value stack
+    TypedArray locals, value_stack;
+    _setup_value_stacks(frame, raw_stack, pc, isFrameTop, &locals, &value_stack);
+  
+    // store to entry
+    entry.pc = pc;
+    entry.locals = locals;
+    entry.value_stack = value_stack;
     
-    // debug
-    // printf("[DEBUG] print types at (%d, %d):\n", pc.fidx, offset);
-    // for (int i = 0; i < (int)locals_types.size; i++) {
-    //   printf("Local type at index %d: %d\n", i, locals_types.contents[i]);
-    // }
-    // for (int i = 0; i < (int)stack_types.size; i++) {
-    //   printf("Stack type at index %d: %d\n", i, stack_types.contents[i]);
-    // }
-    
-    // Allocate buffer for locals (malloc required to avoid errors)
-    // TODO: Avoid memcpy - currently doing double value copying which is wasteful
-    uint32_t* localsBuffer = (uint32_t *)malloc(localsVec.size() * sizeof(uint32_t));
-    memcpy(localsBuffer, localsVec.data(), localsVec.size() * sizeof(uint32_t));
-    entry.locals.types = locals_types;
-    entry.locals.values = {
-        .size = (uint32_t)localsVec.size(),
-        .contents = localsBuffer,
-    };
-    // spdlog::info("Set locals with {} elements", localsVec.size());
 
-    // Process value stack
-    std::vector<uint32_t> stackVec;
-    for (size_t i = 0; i < typeStack.size(); i++) {
-        convertValueToUint32Array(stackVec, typeStack[i], valueStackPtr[i]);
-    }
-    
-    // Allocate buffer for stack
-    uint32_t* stackBuffer = (uint32_t *)malloc(stackVec.size() * sizeof(uint32_t));
-    memcpy(stackBuffer, stackVec.data(), stackVec.size() * sizeof(uint32_t));
-    entry.value_stack.types = stack_types;
-    entry.value_stack.values = {
-        .size = (uint32_t)stackVec.size(),
-        .contents = stackBuffer,
-    };
-    // spdlog::info("Set value stack with {} elements", stackVec.size());
-
-    // Process label stack
-    uint32_t labelStackSize = labelStack.size();
-    uint32_t* begins = (uint32_t *)malloc(labelStackSize * sizeof(uint32_t));
-    uint32_t* targets = (uint32_t *)malloc(labelStackSize * sizeof(uint32_t));
-    uint32_t* stackPointers = (uint32_t *)malloc(labelStackSize * sizeof(uint32_t));
-    uint32_t* cellNums = (uint32_t *)malloc(labelStackSize * sizeof(uint32_t));
-    
-    for (size_t i = 0; i < labelStack.size(); i++) {
-        Migrator::CtrlInfo ctrlInfo = labelStack[i];
-        begins[i] = ctrlInfo.BeginAddrOfs;
-        targets[i] = ctrlInfo.TargetAddrOfs;
-        stackPointers[i] = ctrlInfo.SpOfs;
-        cellNums[i] = ctrlInfo.ResultCells;
-    }
-    
-    entry.label_stack = {
-        .size = labelStackSize,
-        .begins = begins,
-        .targets = targets,
-        .stack_pointers = stackPointers,
-        .cell_nums = cellNums,
-    };
-    // spdlog::info("Set label stack with {} elements", labelStackSize);
 }
 
-void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC) {
-    std::vector<Runtime::StackManager::Frame> frameStack = StackMgr.getFrameStack();
-    std::vector<ValVariant> valueStack = StackMgr.getValueStack();
-    std::vector<std::vector<uint8_t>> typeStacks(frameStack.size());
-    size_t frameCount = frameStack.size() - 1;
-    
-    // spdlog::info("Starting stack dump with {} frames", frameCount);
-    
-    // Build type stacks for each frame (skip frame 0 which is the dummy frame)
-    AST::InstrView::iterator pcCopy = PC;
-    for (size_t frameIndex = frameStack.size() - 1; frameIndex > 0; --frameIndex) {
-        bool isTopFrame = (frameIndex == frameStack.size() - 1);
-        auto frame = frameStack[frameIndex];
-        const Runtime::Instance::ModuleInstance* modInst = frame.Module;
-        
-        auto [funcIdx, offset] = getInstrAddrExpr(modInst, pcCopy);
-        typeStacks[frameIndex] = getTypeStackV2(funcIdx, offset, isTopFrame);
-        pcCopy = frame.From;
-    }
+  void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC) {
+      std::vector<Runtime::StackManager::Frame> frameStack = StackMgr.getFrameStack();
+      std::vector<ValVariant> valueStack = StackMgr.getValueStack();
+      std::vector<std::vector<uint8_t>> typeStacks(frameStack.size());
+      size_t frameCount = frameStack.size() - 1;
+      
 
-    // Build WAMR cell cumulative sums (process frames from bottom to top)
-    uint32_t currentSum = 0;
-    std::vector<uint32_t> wamrCellSums(StackMgr.size() + 1, 0);
-    for (size_t frameIndex = frameStack.size() - 1; frameIndex > 0; --frameIndex) {
-        std::vector<uint8_t>& typeStack = typeStacks[frameIndex];
-        for (size_t typeIndex = 0; typeIndex < typeStack.size(); typeIndex++) {
-            wamrCellSums[currentSum + 1] = wamrCellSums[currentSum] + typeStack[typeIndex];
-            currentSum++;
-        }
-    }
+      // Prepare entries array
+      CallStackEntry entries[frameCount];
+      auto currentPC = PC;
+      
+      // Process each frame for dumping
+      for (size_t frameIndex = frameStack.size() - 1; frameIndex > 0; --frameIndex) {
+          Runtime::StackManager::Frame frame = frameStack[frameIndex];
+          const Runtime::Instance::ModuleInstance* modInst = frame.Module;
+          bool isTopFrame = (frameIndex == frameStack.size() - 1);
+          // if (!isTopFrame) currentPC += 1;
 
-    // Prepare entries array
-    CallStackEntry entries[frameCount];
-    auto currentPC = PC;
-    
-    // Process each frame for dumping
-    for (size_t frameIndex = frameStack.size() - 1; frameIndex > 0; --frameIndex) {
-        Runtime::StackManager::Frame frame = frameStack[frameIndex];
-        const Runtime::Instance::ModuleInstance* modInst = frame.Module;
-        bool isTopFrame = (frameIndex == frameStack.size() - 1);
-        // if (!isTopFrame) currentPC += 1;
+          if (modInst == nullptr) {
+              std::cerr << "Error: ModuleInstance is null for frame " << frameIndex << std::endl;
+              exit(1);
+          }
 
-        if (modInst == nullptr) {
-            std::cerr << "Error: ModuleInstance is null for frame " << frameIndex << std::endl;
-            exit(1);
-        }
+          // Get current PC address
+          auto [currentFuncIdx, currentOffset] = getInstrAddrExpr(modInst, currentPC);
+          CodePos pc = {
+              .fidx = currentFuncIdx,
+              .offset = currentOffset,
+          };
+          // spdlog::info("Processing frame {}: PC = ({}, {}), OpCode: {}", frameIndex, pc.fidx, pc.offset, (currentPC)->getOpCode());
 
-        // Get current PC address
-        auto [currentFuncIdx, currentOffset] = getInstrAddrExpr(modInst, currentPC);
-        CodePos pc = {
-            .fidx = currentFuncIdx,
-            .offset = currentOffset,
-        };
-        // spdlog::info("Processing frame {}: PC = ({}, {}), OpCode: {}", frameIndex, pc.fidx, pc.offset, (currentPC)->getOpCode());
+          // Calculate local and stack pointers
+          uint32_t stackBottom = frame.VPos - frame.Locals;
+          ValVariant* raw_stack = valueStack.data() + stackBottom;
+          // ValVariant* localsPtr = valueStack.data() + stackBottom;
+          // ValVariant* valueStackPtr = valueStack.data() + stackBottom + frame.Locals;
 
-        // Calculate local and stack pointers
-        uint32_t stackBottom = frame.VPos - frame.Locals;
-        ValVariant* localsPtr = valueStack.data() + stackBottom;
-        ValVariant* valueStackPtr = valueStack.data() + stackBottom + frame.Locals;
+          // Get control stack (label stack)
+          // auto funcResult = modInst->getFunc(pc.fidx);
+          // if (!funcResult) {
+          //     std::cerr << "Error: Invalid function index " << pc.fidx << std::endl;
+          //     exit(1);
+          // }
+          // Runtime::Instance::FunctionInstance* funcInst = funcResult.value();
+          // std::vector<struct CtrlInfo> ctrlStack = getCtrlStack(currentPC, funcInst, wamrCellSums);
+          
+          // Dump this frame using the pre-computed type stack
+          size_t entryIndex = frameIndex - 1;  // Convert frame index to entry array index
+          _dumpStack(frame, pc, raw_stack, entries[entryIndex], isTopFrame);
+          // spdlog::info("Successfully dumped frame {}", frameIndex);
 
-        // Get control stack (label stack)
-        auto funcResult = modInst->getFunc(pc.fidx);
-        if (!funcResult) {
-            std::cerr << "Error: Invalid function index " << pc.fidx << std::endl;
-            exit(1);
-        }
-        Runtime::Instance::FunctionInstance* funcInst = funcResult.value();
-        std::vector<struct CtrlInfo> ctrlStack = getCtrlStack(currentPC, funcInst, wamrCellSums);
-        
-        // Dump this frame using the pre-computed type stack
-        size_t entryIndex = frameIndex - 1;  // Convert frame index to entry array index
-        _dumpStack(pc, localsPtr, valueStackPtr, ctrlStack, entries[entryIndex], typeStacks[frameIndex], isTopFrame);
-        // spdlog::info("Successfully dumped frame {}", frameIndex);
-
-        // Update PC for next iteration
-        currentPC = frame.From;
-    }
-    
-    // Checkpoint the complete stack
-    wasmig_checkpoint_stack_v4(frameCount, entries);
-    // spdlog::info("Stack dump completed successfully");
-}
+          // Update PC for next iteration
+          currentPC = frame.From;
+      }
+      
+      // Checkpoint the complete stack
+      wasmig_checkpoint_stack_v4(frameCount, entries);
+      // spdlog::info("Stack dump completed successfully");
+  }
   
   /// ================
   /// Restore functions
