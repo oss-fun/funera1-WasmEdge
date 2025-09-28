@@ -418,8 +418,10 @@ void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC
       // }
 
       // 値スタック
-      std::cerr << "restore locals" << std::endl; restoreValuesFromUint32Array(StackMgr, entry.locals);
-      std::cerr << "restore stack" << std::endl;  restoreValuesFromUint32Array(StackMgr, entry.value_stack);
+      // std::cerr << "restore locals" << std::endl; 
+      restoreValuesFromUint32Array(StackMgr, entry.locals);
+      // std::cerr << "restore stack" << std::endl;  
+      restoreValuesFromUint32Array(StackMgr, entry.value_stack);
 
       From = PC;
 

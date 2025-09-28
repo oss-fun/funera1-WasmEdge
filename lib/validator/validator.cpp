@@ -10,6 +10,10 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
+#include <wasmig/table_v3.h>
+#include <wasmig/registry.h>
+#include <wasmig/migration.h>
+#include <wasmig/log.h>
 
 namespace WasmEdge {
 namespace Validator {
@@ -363,10 +367,16 @@ Expect<void> Validator::validate(const AST::CodeSegment &CodeSeg,
       Checker.getTypes()[TypeIdx]->getCompositeType().getFuncType();
   // Reset stack in FormChecker.
   Checker.reset();
+  uint32_t param_local_cell_num = 0;
   // Add parameters into this frame.
   for (auto &Type : FuncType.getParamTypes()) {
     // Local passed as function parameters should be initialized.
     Checker.addLocal(Type, true);
+
+    // Initialize metadata stacks for each param variable.
+    Checker.metadata_address_stack = wasmig_stack_push(Checker.metadata_address_stack, param_local_cell_num);
+    Checker.metadata_type_stack = wasmig_stack_push(Checker.metadata_type_stack, Checker.wasm_type_width(Type));
+    param_local_cell_num++;
   }
   // Add locals into this frame.
   for (auto Val : CodeSeg.getLocals()) {
@@ -376,6 +386,11 @@ Expect<void> Validator::validate(const AST::CodeSegment &CodeSeg,
         return Unexpect(Res);
       }
       Checker.addLocal(Val.second, false);
+
+      // Initialize metadata stacks for each local variable.
+      Checker.metadata_address_stack = wasmig_stack_push(Checker.metadata_address_stack, param_local_cell_num);
+      Checker.metadata_type_stack = wasmig_stack_push(Checker.metadata_type_stack, Checker.wasm_type_width(Val.second));
+      param_local_cell_num++;
     }
   }
   // Validate function body expression.
@@ -674,6 +689,11 @@ Expect<void> Validator::validate(const AST::CodeSection &CodeSec) {
 
   // Validate function body.
   for (uint32_t Id = 0; Id < static_cast<uint32_t>(CodeVec.size()); ++Id) {
+    // Init metadata stacks for each function validation.
+    Checker.metadata_stack_map = wasmig_stack_state_map_create();
+    Checker.metadata_address_stack = wasmig_stack_create();
+    Checker.metadata_type_stack = wasmig_stack_create();
+
     // Added functions contains imported functions.
     uint32_t TId = Id + static_cast<uint32_t>(Checker.getNumImportFuncs());
     if (TId >= static_cast<uint32_t>(FuncVec.size())) {
@@ -687,6 +707,9 @@ Expect<void> Validator::validate(const AST::CodeSection &CodeSec) {
       spdlog::error(ErrInfo::InfoAST(ASTNodeAttr::Seg_Code));
       return Unexpect(Res);
     }
+  
+    // register metadata stack
+    wasmig_stack_state_map_registry_save(TId, Checker.metadata_stack_map);
   }
   return {};
 }

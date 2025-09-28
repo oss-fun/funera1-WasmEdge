@@ -2277,36 +2277,24 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       }
 
       const AST::InstrView::iterator Iter = PC;
-      std::cout << "[DEBUG] (Iter, Iter->Offset, Iter->OpCode) = (" << Iter << ", " << Iter->getOffset() << ", " << OpCodeStr[Iter->getOpCode()] << ")" << std::endl;
-      struct timespec ts1, ts2;
+      // std::cout << "[DEBUG] (Iter, Iter->Offset, Iter->OpCode) = (" << Iter << ", " << Iter->getOffset() << ", " << OpCodeStr[Iter->getOpCode()] << ")" << std::endl;
+
+      struct timespec tp_start, tp_end;
+      clock_gettime(CLOCK_MONOTONIC, &tp_start);
       // clock_gettime(CLOCK_MONOTONIC, &t_ts1);
       // For WasmEdge
-      clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpMemoryV2(StackMgr.getModule());
-      clock_gettime(CLOCK_MONOTONIC, &ts2);
-      std::cerr << "memory, " << getTime(ts1, ts2) << std::endl;
-
-      clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpGlobal(StackMgr.getModule());
-      clock_gettime(CLOCK_MONOTONIC, &ts2);
-      std::cerr << "global, " << getTime(ts1, ts2) << std::endl;
-
-      // std::cerr << "Success dumpGlobal" << std::endl;
-      clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpProgramCounter(StackMgr.getModule(), Iter);
-      clock_gettime(CLOCK_MONOTONIC, &ts2);
-      std::cerr << "program counter, " << getTime(ts1, ts2) << std::endl;
-      // std::cerr << "Success dumpIter" << std::endl;
-
-      clock_gettime(CLOCK_MONOTONIC, &ts1);
       if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
         Migr.dumpStackV1(StackMgr, Iter);
       } else {
         Migr.dumpStackV2(StackMgr, Iter);
       }
-      clock_gettime(CLOCK_MONOTONIC, &ts2);
-      std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;
-      // std::cerr << "Success dumpStack" << std::endl;
+      
+      clock_gettime(CLOCK_MONOTONIC, &tp_end);
+      double elapsed = (tp_end.tv_sec - tp_start.tv_sec) + (tp_end.tv_nsec - tp_start.tv_nsec);
+      spdlog::info("[WasmEdge] Checkpoint took {:.3f} milliseconds", elapsed / 1e6);
       
       // Clean flag
       setCheckpointFlag(0);
@@ -2321,6 +2309,8 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
 
       // Restore
       // Migr.Prepare(StackMgr.getModule(), Conf.getStatisticsConfigure().getImageDir());
+      struct timespec tp2_start, tp2_end;
+      clock_gettime(CLOCK_MONOTONIC, &tp2_start);
       Migr.restoreMemoryV2(StackMgr.getModule());
       Migr.restoreGlobal(StackMgr.getModule());
       auto Res = Migr.restoreProgramCounter(StackMgr.getModule());
@@ -2334,6 +2324,10 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       } else {
         Migr.restoreStackV2(StackMgr);
       }
+
+      clock_gettime(CLOCK_MONOTONIC, &tp2_end);
+      elapsed = (tp2_end.tv_sec - tp2_start.tv_sec) + (tp2_end.tv_nsec - tp2_start.tv_nsec);
+      spdlog::info("[WasmEdge] Restore took {:.3f} milliseconds", elapsed / 1e6);
     }
 
     PC++;

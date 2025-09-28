@@ -25,6 +25,9 @@
 #include <utility>
 #include <vector>
 
+#include <wasmig/table_v3.h>
+#include <wasmig/registry.h>
+
 namespace WasmEdge {
 namespace Validator {
 
@@ -99,6 +102,21 @@ public:
     const ValType VType;
   };
 
+  /// Metadata for Wasm C/R
+  StackStateMap metadata_stack_map;
+  Stack metadata_address_stack;
+  Stack metadata_type_stack;
+  Stack metadata_callsite_address_stack;
+  Stack metadata_callsite_type_stack;
+
+  // helper function for type stack
+  static inline uint32_t wasm_type_width(VType type) {
+    return type.has_value() ? type->getBitWidth() / 8 : 0;
+  }
+  static inline uint32_t wasm_type_width(ValType type) {
+    return type.getBitWidth() / 8;
+  }
+
 private:
   /// Checking expression
   Expect<void> checkExpr(AST::InstrView Instrs);
@@ -123,6 +141,7 @@ private:
   Span<const ValType> getLabelTypes(const CtrlFrame &F);
   Expect<void> unreachable();
   Expect<void> StackTrans(Span<const ValType> Take, Span<const ValType> Put);
+  Expect<void> StackTransForCall(Span<const ValType> Take, Span<const ValType> Put);
   Expect<void> StackPopAny();
 
   /// Contexts.

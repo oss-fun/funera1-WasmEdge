@@ -138,6 +138,13 @@ Expect<void> FormChecker::checkInstrs(AST::InstrView Instrs) {
           ErrInfo::InfoInstruction(Instr.getOpCode(), Instr.getOffset()));
       return Unexpect(Res);
     }
+    // Save metadata stack
+    if (Instr.getOpCode() == OpCode::Call || Instr.getOpCode() == OpCode::Call_indirect) {
+      wasmig_stack_state_save_pair(metadata_stack_map, Instr.getOffset()+1, 
+          metadata_callsite_address_stack, metadata_callsite_type_stack);
+    }
+    wasmig_stack_state_save_pair(metadata_stack_map, Instr.getOffset(), 
+        metadata_address_stack, metadata_type_stack);
   }
   return {};
 }
@@ -642,7 +649,7 @@ Expect<void> FormChecker::checkInstr(const AST::Instruction &Instr) {
     // Due to validation when adding functions, Type[Funcs[N]] must be a
     // function type.
     auto &FuncType = Types[Funcs[N]]->getCompositeType().getFuncType();
-    return StackTrans(FuncType.getParamTypes(), FuncType.getReturnTypes());
+    return StackTransForCall(FuncType.getParamTypes(), FuncType.getReturnTypes());
   }
   case OpCode::Call_indirect: {
     auto N = Instr.getTargetIndex();
@@ -663,7 +670,7 @@ Expect<void> FormChecker::checkInstr(const AST::Instruction &Instr) {
         return Unexpect(Res);
       }
       const auto &FType = (*CompType)->getFuncType();
-      return StackTrans(FType.getParamTypes(), FType.getReturnTypes());
+      return StackTransForCall(FType.getParamTypes(), FType.getReturnTypes());
     } else {
       return Unexpect(CompType);
     }
@@ -2306,7 +2313,13 @@ Expect<void> FormChecker::checkInstr(const AST::Instruction &Instr) {
   }
 }
 
-void FormChecker::pushType(VType V) { ValStack.emplace_back(V); }
+void FormChecker::pushType(VType V) { 
+  ValStack.emplace_back(V); 
+
+  // Push to metadata stack
+  metadata_address_stack = wasmig_stack_push(metadata_address_stack, LocalInits.size() + ValStack.size() - 1);
+  metadata_type_stack = wasmig_stack_push(metadata_type_stack, wasm_type_width(V));
+}
 
 void FormChecker::pushTypes(Span<const VType> Input) {
   for (auto Val : Input) {
@@ -2332,6 +2345,11 @@ Expect<VType> FormChecker::popType() {
   }
   auto Res = ValStack.back();
   ValStack.pop_back();
+
+  // Pop from metadata stack
+  metadata_address_stack = wasmig_stack_pop(metadata_address_stack, NULL);
+  metadata_type_stack = wasmig_stack_pop(metadata_type_stack, NULL);
+
   return Res;
 }
 
@@ -2420,6 +2438,20 @@ Expect<void> FormChecker::StackTrans(Span<const ValType> Take,
   if (auto Res = popTypes(Take); !Res) {
     return Unexpect(Res);
   }
+  pushTypes(Put);
+  return {};
+}
+
+Expect<void> FormChecker::StackTransForCall(Span<const ValType> Take,
+                                     Span<const ValType> Put) {
+  if (auto Res = popTypes(Take); !Res) {
+    return Unexpect(Res);
+  }
+
+  // save metadata stack during call next function
+  metadata_callsite_type_stack = metadata_type_stack;
+  metadata_callsite_address_stack = metadata_address_stack;
+
   pushTypes(Put);
   return {};
 }
