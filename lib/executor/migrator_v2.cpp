@@ -462,6 +462,7 @@ namespace Executor {
     
     // restore stack
     CallStack cs = wasmig_restore_stack();
+    wasmig_debug("Restored stack with %d frames\n", cs.size);
     // print_call_stack(&cs);
     
 
@@ -518,6 +519,9 @@ namespace Executor {
       restoreValuesFromUint32Array(StackMgr, entry.locals);
       // std::cerr << "restore stack" << std::endl;  
       restoreValuesFromUint32Array(StackMgr, entry.value_stack);
+
+      wasmig_debug("Restored frame %zu: PC = (%u, %u), Locals = %u, Rets = %u, VPos = %u\n", 
+                  I, entry.pc.fidx, entry.pc.offset, Locals, RetsN, VPos);
 
       From = PC;
 

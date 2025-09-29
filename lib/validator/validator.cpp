@@ -361,7 +361,7 @@ Expect<void> Validator::validate(const AST::ElementSegment &ElemSeg) {
 // Validate Code segment. See "include/validator/validator.h".
 Expect<void> Validator::validate(const AST::CodeSegment &CodeSeg,
                                  const uint32_t TypeIdx) {
-  // Due to the validation of the function section, the type of index bust be a
+  // Due to the validation of the function section, the type of index must be a
   // function type.
   const auto &FuncType =
       Checker.getTypes()[TypeIdx]->getCompositeType().getFuncType();
@@ -376,7 +376,7 @@ Expect<void> Validator::validate(const AST::CodeSegment &CodeSeg,
     // Initialize metadata stacks for each param variable.
     Checker.metadata_address_stack = wasmig_stack_push(Checker.metadata_address_stack, param_local_cell_num);
     Checker.metadata_type_stack = wasmig_stack_push(Checker.metadata_type_stack, Checker.wasm_type_width(Type));
-    wasmig_info("param %d: width %d\n", param_local_cell_num, Checker.wasm_type_width(Type));
+    wasmig_debug("param %d: width %d\n", param_local_cell_num, Checker.wasm_type_width(Type));
     param_local_cell_num++;
   }
   // Add locals into this frame.
@@ -391,7 +391,7 @@ Expect<void> Validator::validate(const AST::CodeSegment &CodeSeg,
       // Initialize metadata stacks for each local variable.
       Checker.metadata_address_stack = wasmig_stack_push(Checker.metadata_address_stack, param_local_cell_num);
       Checker.metadata_type_stack = wasmig_stack_push(Checker.metadata_type_stack, Checker.wasm_type_width(Val.second));
-      wasmig_info("local %d: width %d\n", param_local_cell_num, Checker.wasm_type_width(Val.second));
+      wasmig_debug("local %d: width %d\n", param_local_cell_num, Checker.wasm_type_width(Val.second));
       param_local_cell_num++;
     }
   }
@@ -712,7 +712,7 @@ Expect<void> Validator::validate(const AST::CodeSection &CodeSec) {
   
     // register metadata stack
     wasmig_stack_state_map_registry_save(TId, Checker.metadata_stack_map);
-    wasmig_info("Function %d metadata stack registered", TId);
+    wasmig_debug("Function %d metadata stack registered", TId);
   }
   return {};
 }

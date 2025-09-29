@@ -2291,39 +2291,45 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       clock_gettime(CLOCK_MONOTONIC, &tp_end);
       double elapsed = (tp_end.tv_sec - tp_start.tv_sec) + (tp_end.tv_nsec - tp_start.tv_nsec);
       spdlog::info("[WasmEdge] Checkpoint took {:.3f} milliseconds", elapsed / 1e6);
-      
+
       // Clean flag
       setCheckpointFlag(0);
 
-      // 自分自身に SIGTSTP を送信
-      pid_t pid = getpid();
-      if (kill(pid, SIGTSTP) != 0) {
-          perror("kill");
-          return {};
-      }
-      setCheckpointFlag(0);
+      // Self Stop and Restore for an experiment which is checkpoint and restore WasmEdge's sockets
+      if (std::getenv("IS_SELF_STOP_AND_RESTORE") && std::string(std::getenv("IS_SELF_STOP_AND_RESTORE")) == "1") {
 
-      // Restore
-      // Migr.Prepare(StackMgr.getModule(), Conf.getStatisticsConfigure().getImageDir());
-      struct timespec tp2_start, tp2_end;
-      clock_gettime(CLOCK_MONOTONIC, &tp2_start);
-      Migr.restoreMemoryV2(StackMgr.getModule());
-      Migr.restoreGlobal(StackMgr.getModule());
-      auto Res = Migr.restoreProgramCounter(StackMgr.getModule());
-      if (!Res) {
-        return Unexpect(Res);
-      }
-      PC = Res.value();
-      // StartIt += 1; // 保存は、前の命令と対応づけているので、復元時に+1
-      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
-        Migr.restoreStackV1(StackMgr);
+        // 自分自身に SIGTSTP を送信
+        pid_t pid = getpid();
+        if (kill(pid, SIGTSTP) != 0) {
+            perror("kill");
+            return {};
+        }
+        setCheckpointFlag(0);
+
+        // Restore
+        // Migr.Prepare(StackMgr.getModule(), Conf.getStatisticsConfigure().getImageDir());
+        struct timespec tp2_start, tp2_end;
+        clock_gettime(CLOCK_MONOTONIC, &tp2_start);
+        Migr.restoreMemoryV2(StackMgr.getModule());
+        Migr.restoreGlobal(StackMgr.getModule());
+        auto Res = Migr.restoreProgramCounter(StackMgr.getModule());
+        if (!Res) {
+          return Unexpect(Res);
+        }
+        PC = Res.value();
+        // StartIt += 1; // 保存は、前の命令と対応づけているので、復元時に+1
+        if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+          Migr.restoreStackV1(StackMgr);
+        } else {
+          Migr.restoreStackV2(StackMgr);
+        }
+
+        clock_gettime(CLOCK_MONOTONIC, &tp2_end);
+        elapsed = (tp2_end.tv_sec - tp2_start.tv_sec) + (tp2_end.tv_nsec - tp2_start.tv_nsec);
+        spdlog::info("[WasmEdge] Restore took {:.3f} milliseconds", elapsed / 1e6);
       } else {
-        Migr.restoreStackV2(StackMgr);
+        exit(0);
       }
-
-      clock_gettime(CLOCK_MONOTONIC, &tp2_end);
-      elapsed = (tp2_end.tv_sec - tp2_start.tv_sec) + (tp2_end.tv_nsec - tp2_start.tv_nsec);
-      spdlog::info("[WasmEdge] Restore took {:.3f} milliseconds", elapsed / 1e6);
     }
 
     PC++;

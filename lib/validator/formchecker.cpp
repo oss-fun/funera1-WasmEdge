@@ -146,14 +146,16 @@ Expect<void> FormChecker::checkInstrs(AST::InstrView Instrs) {
       return Unexpect(Res);
     }
     // Save metadata stack
-    if (Instr.getOpCode() == OpCode::Call || Instr.getOpCode() == OpCode::Call_indirect) {
-      spdlog::info("Saving type stack for fidx={}, offset={}\n", Instr.getTargetIndex(), getOffset(Instr.getOffset()+1));
-      wasmig_stack_state_save_pair(metadata_stack_map, getOffset(Instr.getOffset()+1), 
-          metadata_callsite_address_stack, metadata_callsite_type_stack);
+    if (metadata_stack_map != NULL && metadata_address_stack != NULL && metadata_type_stack != NULL) {
+      if (Instr.getOpCode() == OpCode::Call || Instr.getOpCode() == OpCode::Call_indirect) {
+        spdlog::debug("Saving type stack for fidx={}, offset={}\n", Instr.getTargetIndex(), getOffset(Instr.getOffset()+1));
+        wasmig_stack_state_save_pair(metadata_stack_map, getOffset(Instr.getOffset()+1), 
+            metadata_callsite_address_stack, metadata_callsite_type_stack);
+      }
+      spdlog::debug("Saving type stack for fidx={}, offset={}\n", Instr.getTargetIndex(), getOffset(Instr.getOffset()));
+      wasmig_stack_state_save_pair(metadata_stack_map, getOffset(Instr.getOffset()), 
+          metadata_address_stack, metadata_type_stack);
     }
-    spdlog::info("Saving type stack for fidx={}, offset={}\n", Instr.getTargetIndex(), getOffset(Instr.getOffset()));
-    wasmig_stack_state_save_pair(metadata_stack_map, getOffset(Instr.getOffset()), 
-        metadata_address_stack, metadata_type_stack);
   }
   return {};
 }
@@ -2326,9 +2328,10 @@ void FormChecker::pushType(VType V) {
   ValStack.emplace_back(V); 
 
   // Push to metadata stack
-  metadata_address_stack = wasmig_stack_push(metadata_address_stack, LocalInits.size() + ValStack.size() - 1);
-  metadata_type_stack = wasmig_stack_push(metadata_type_stack, wasm_type_width(V));
-  wasmig_info("width %d\n", wasm_type_width(V));
+  if (metadata_address_stack != NULL && metadata_type_stack != NULL) {
+    metadata_address_stack = wasmig_stack_push(metadata_address_stack, LocalInits.size() + ValStack.size() - 1);
+    metadata_type_stack = wasmig_stack_push(metadata_type_stack, wasm_type_width(V));
+  }
 }
 
 void FormChecker::pushTypes(Span<const VType> Input) {
@@ -2357,8 +2360,10 @@ Expect<VType> FormChecker::popType() {
   ValStack.pop_back();
 
   // Pop from metadata stack
-  metadata_address_stack = wasmig_stack_pop(metadata_address_stack, NULL);
-  metadata_type_stack = wasmig_stack_pop(metadata_type_stack, NULL);
+  if (metadata_address_stack != NULL && metadata_type_stack != NULL) {
+    metadata_address_stack = wasmig_stack_pop(metadata_address_stack, NULL);
+    metadata_type_stack = wasmig_stack_pop(metadata_type_stack, NULL);
+  }
 
   return Res;
 }
