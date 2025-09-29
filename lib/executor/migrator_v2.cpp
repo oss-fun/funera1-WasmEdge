@@ -109,53 +109,57 @@ namespace Executor {
   //     }
   // }
 
-  // /// Restore values from uint32_t array representation back to the stack manager
-  // void restoreValuesFromUint32Array(Runtime::StackManager& stackManager, TypedArray serializedArray) {
-  //   size_t arrayIndex = 0;
+  /// Restore values from uint32_t array representation back to the stack manager
+  void restoreValuesFromUint32Array(Runtime::StackManager& stackManager, TypedArray serializedArray) {
+    size_t arrayIndex = 0;
     
-  //   for (size_t typeIndex = 0; typeIndex < serializedArray.types.size; typeIndex++) {
-  //     uint8_t valueType = serializedArray.types.contents[typeIndex];
+    for (size_t typeIndex = 0; typeIndex < serializedArray.types.size; typeIndex++) {
+      uint8_t valueType = serializedArray.types.contents[typeIndex];
       
-  //     switch (valueType) {
-  //       case TYPE_S32:
-  //         {
-  //           if (arrayIndex >= serializedArray.values.size) {
-  //             std::cerr << "Error: Array index out of bounds during S32 restoration" << std::endl;
-  //             exit(1);
-  //           }
-  //           stackManager.push(serializedArray.values.contents[arrayIndex++]);
-  //           break;
-  //         }
-  //       case TYPE_S64:
-  //         {
-  //           if (arrayIndex + 1 >= serializedArray.values.size) {
-  //             std::cerr << "Error: Array index out of bounds during S64 restoration" << std::endl;
-  //             exit(1);
-  //           }
-  //           // Unpack two 32-bit values back into 64-bit: [low_bits, high_bits]
-  //           uint32_t lowBits = serializedArray.values.contents[arrayIndex++];
-  //           uint32_t highBits = serializedArray.values.contents[arrayIndex++];
-  //           int64_t val64 = (static_cast<int64_t>(highBits) << 32) | static_cast<int64_t>(lowBits);
-  //           stackManager.push(val64);
-  //           break;
-  //         }
-  //       case TYPE_S128:
-  //         {
-  //           std::cerr << "Error: V128 type is not supported in migration" << std::endl;
-  //           exit(1);
-  //         }
-  //       default:
-  //         {
-  //           std::cerr << "Error: Unknown value type in restoration: " << static_cast<int>(valueType) << std::endl;
-  //           exit(1);
-  //         }
-  //     }
-  //   }
-  // }
+      switch (valueType) {
+        case TYPE_S32:
+          {
+            if (arrayIndex >= serializedArray.values.size) {
+              std::cerr << "Error: Array index out of bounds during S32 restoration" << std::endl;
+              exit(1);
+            }
+            stackManager.push(serializedArray.values.contents[arrayIndex++]);
+            break;
+          }
+        case TYPE_S64:
+          {
+            if (arrayIndex + 1 >= serializedArray.values.size) {
+              std::cerr << "Error: Array index out of bounds during S64 restoration" << std::endl;
+              exit(1);
+            }
+            // Unpack two 32-bit values back into 64-bit: [low_bits, high_bits]
+            uint32_t lowBits = serializedArray.values.contents[arrayIndex++];
+            uint32_t highBits = serializedArray.values.contents[arrayIndex++];
+            int64_t val64 = (static_cast<int64_t>(highBits) << 32) | static_cast<int64_t>(lowBits);
+            stackManager.push(val64);
+            break;
+          }
+        case TYPE_S128:
+          {
+            std::cerr << "Error: V128 type is not supported in migration" << std::endl;
+            exit(1);
+          }
+        default:
+          {
+            std::cerr << "Error: Unknown value type in restoration: " << static_cast<int>(valueType) << std::endl;
+            exit(1);
+          }
+      }
+    }
+  }
 
-  bool materialize_stack_values(Stack addr_stack, Stack type_stack, ValVariant* raw_stack,
-                                uint8_t* type_buf, uint32_t* value_buf, 
-                                uint32_t stack_count, uint32_t stack_size) {
+  bool materialize_stack_values(
+    Stack addr_stack, 
+    Stack type_stack, 
+    std::vector<ValVariant>& raw_stack,
+    uint8_t* type_buf, uint32_t* value_buf, 
+    uint32_t stack_count, uint32_t stack_size) 
+  {
     uint32_t stack_ptr = 0;
     StackIterator addr_it = wasmig_stack_iterator_create(addr_stack);
     StackIterator type_it = wasmig_stack_iterator_create(type_stack);
@@ -181,16 +185,17 @@ namespace Executor {
             case 1: // i32
             {
                 wasmig_debug("reconstruct stack[%u]: i32 %u\n", stack_ptr, (uint32_t)address);
-                uint32_t value = (uint32_t)raw_stack[(size_t)address];   // indexをsize_tに
-                value_buf[stack_ptr] = value;
-                wasmig_debug("value_buf[%u]: %u\n", stack_ptr, value);
+                value_buf[stack_ptr] = raw_stack[(size_t)address].get<uint32_t>();
                 break;
             }
             case 2: // i64
             {
                 wasmig_debug("reconstruct stack[%u]: i64 %u\n", stack_ptr, (uint64_t)address);
-                value_buf[stack_ptr]   = (uint32_t)raw_stack[(size_t)address];
-                value_buf[stack_ptr+1] = (uint32_t)raw_stack[(size_t)address + 1];
+                uint64_t val64 = raw_stack[(size_t)address].get<uint64_t>();
+                uint32_t lowBits = static_cast<uint32_t>(val64 & 0xFFFFFFFFLL);
+                uint32_t highBits = static_cast<uint32_t>((val64 >> 32) & 0xFFFFFFFFLL);
+                value_buf[stack_ptr]   = lowBits;
+                value_buf[stack_ptr+1] = highBits;
                 break;
             }
             default:
@@ -211,10 +216,6 @@ namespace Executor {
       uint32_t stack_count = 0;
       uint32_t stack_size  = 0;
       uint32_t locals_size = 0;
-
-      // if (locals_count == 0) {
-      //     locals_count = 0; // 0なら無視する
-      // }
 
       // リングバッファで末尾 locals_count 個を保持
       uint32_t *ring = (uint32_t *)((locals_count>0) ? malloc(sizeof(uint32_t) * locals_count) : NULL);
@@ -256,11 +257,25 @@ namespace Executor {
       return true;
   }
 
+  bool load_metadata_stacks(uint32_t fidx, uint32_t offset, Stack* addr_stack, Stack* type_stack) {
+      StackStateMap m = wasmig_stack_state_map_registry_load(fidx);
+      if (!m) {
+          wasmig_error("no stack state map for function %d\n", fidx);
+          return false;
+      }
+      if (!wasmig_stack_state_load_pair(m, offset, addr_stack, type_stack)) {
+          wasmig_error("failed to load metadata stack\n");
+          return false;
+      }
+      wasmig_stack_print(*addr_stack);
+      wasmig_stack_print(*type_stack);
+      return true;
+  }
   
   static bool
   _setup_value_stacks(
     Runtime::StackManager::Frame frame,
-    ValVariant* raw_stack, 
+    std::vector<ValVariant> raw_stack, 
     CodePos pc, 
     bool isFrameTop,
     TypedArray *out_locals, 
@@ -271,6 +286,7 @@ namespace Executor {
           pc.offset += 1;
 
     Stack addr_stack, type_stack;
+    wasmig_info("Loading type stack for fidx=%d, offset=%d (isTopFrame=%d)\n", pc.fidx, pc.offset, isFrameTop);
     if (!load_metadata_stacks(pc.fidx, pc.offset, &addr_stack, &type_stack))
         return false;
 
@@ -334,15 +350,10 @@ namespace Executor {
   void _dumpStack(
       Runtime::StackManager::Frame frame,
       CodePos pc,
-      ValVariant* raw_stack,
+      std::vector<ValVariant>& raw_stack,
       CallStackEntry& entry,
       bool isFrameTop
   ) {
-    if (raw_stack == nullptr) {
-        std::cerr << "Error: Raw stack is null" << std::endl;
-        exit(1);
-    }
-    
     // Set program counter
     entry.pc = pc;
 
@@ -354,8 +365,7 @@ namespace Executor {
     entry.pc = pc;
     entry.locals = locals;
     entry.value_stack = value_stack;
-    
-
+    entry.label_stack = (LabelStack){0, NULL, NULL, NULL, NULL};
 }
 
   void M::dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC) {
@@ -364,7 +374,6 @@ namespace Executor {
       std::vector<std::vector<uint8_t>> typeStacks(frameStack.size());
       size_t frameCount = frameStack.size() - 1;
       
-
       // Prepare entries array
       CallStackEntry entries[frameCount];
       auto currentPC = PC;
@@ -391,19 +400,11 @@ namespace Executor {
 
           // Calculate local and stack pointers
           uint32_t stackBottom = frame.VPos - frame.Locals;
-          ValVariant* raw_stack = valueStack.data() + stackBottom;
+          std::vector<ValVariant> raw_stack(valueStack.begin() + stackBottom, valueStack.end());
+          // ValVariant* raw_stack = valueStack.data() + stackBottom;
           // ValVariant* localsPtr = valueStack.data() + stackBottom;
           // ValVariant* valueStackPtr = valueStack.data() + stackBottom + frame.Locals;
 
-          // Get control stack (label stack)
-          // auto funcResult = modInst->getFunc(pc.fidx);
-          // if (!funcResult) {
-          //     std::cerr << "Error: Invalid function index " << pc.fidx << std::endl;
-          //     exit(1);
-          // }
-          // Runtime::Instance::FunctionInstance* funcInst = funcResult.value();
-          // std::vector<struct CtrlInfo> ctrlStack = getCtrlStack(currentPC, funcInst, wamrCellSums);
-          
           // Dump this frame using the pre-computed type stack
           size_t entryIndex = frameIndex - 1;  // Convert frame index to entry array index
           _dumpStack(frame, pc, raw_stack, entries[entryIndex], isTopFrame);
@@ -414,6 +415,9 @@ namespace Executor {
       }
       
       // Checkpoint the complete stack
+      printf("Checkpointing stack with %zu frames\n", frameCount);
+      CallStack cs = {.size = (uint32_t)frameCount, .entries = entries};
+      print_call_stack(&cs);
       wasmig_checkpoint_stack_v4(frameCount, entries);
       // spdlog::info("Stack dump completed successfully");
   }

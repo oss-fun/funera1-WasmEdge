@@ -52,13 +52,13 @@ namespace Executor {
     BaseModName = ModInst->getModuleName();
     
     // Load stack table
-      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
-      } else {
-          if (load_stack_tables() == 0) {
-            spdlog::error("Not found stack tables");
-            exit(1);
-          }
-      }
+    // if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
+    // } else {
+    //     if (load_stack_tables() == 0) {
+    //       spdlog::error("Not found stack tables");
+    //       exit(1);
+    //     }
+    // }
   }
   
   uint32_t M::getFuncIdx(const AST::InstrView::iterator PC) {

@@ -10,6 +10,7 @@
 #include <array>
 #include <cstdint>
 #include <tuple>
+#include <wasmig/log.h>
 
 namespace WasmEdge {
 namespace Validator {
@@ -132,6 +133,12 @@ Expect<void> FormChecker::checkExpr(AST::InstrView Instrs) {
 
 Expect<void> FormChecker::checkInstrs(AST::InstrView Instrs) {
   // Validate instructions
+  auto baseInstr = Instrs.begin();
+  uint32_t base_offset = baseInstr->getOffset();
+  auto getOffset = [base_offset](uint32_t targetOffset) {
+    return targetOffset - base_offset;
+  };
+
   for (auto &Instr : Instrs) {
     if (auto Res = checkInstr(Instr); !Res) {
       spdlog::error(
@@ -140,10 +147,12 @@ Expect<void> FormChecker::checkInstrs(AST::InstrView Instrs) {
     }
     // Save metadata stack
     if (Instr.getOpCode() == OpCode::Call || Instr.getOpCode() == OpCode::Call_indirect) {
-      wasmig_stack_state_save_pair(metadata_stack_map, Instr.getOffset()+1, 
+      spdlog::info("Saving type stack for fidx={}, offset={}\n", Instr.getTargetIndex(), getOffset(Instr.getOffset()+1));
+      wasmig_stack_state_save_pair(metadata_stack_map, getOffset(Instr.getOffset()+1), 
           metadata_callsite_address_stack, metadata_callsite_type_stack);
     }
-    wasmig_stack_state_save_pair(metadata_stack_map, Instr.getOffset(), 
+    spdlog::info("Saving type stack for fidx={}, offset={}\n", Instr.getTargetIndex(), getOffset(Instr.getOffset()));
+    wasmig_stack_state_save_pair(metadata_stack_map, getOffset(Instr.getOffset()), 
         metadata_address_stack, metadata_type_stack);
   }
   return {};
@@ -2319,6 +2328,7 @@ void FormChecker::pushType(VType V) {
   // Push to metadata stack
   metadata_address_stack = wasmig_stack_push(metadata_address_stack, LocalInits.size() + ValStack.size() - 1);
   metadata_type_stack = wasmig_stack_push(metadata_type_stack, wasm_type_width(V));
+  wasmig_info("width %d\n", wasm_type_width(V));
 }
 
 void FormChecker::pushTypes(Span<const VType> Input) {

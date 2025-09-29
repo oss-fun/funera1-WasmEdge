@@ -2264,14 +2264,10 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
         isDumpMode: --no-checkpointオプションがない場合に1、ある場合に0が入る 
     */
     if (unlikely(getCheckpointFlag() & isDumpMode)) {
+      // the type stack table is necessary for CR v1
       if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
         if (!Migr.isExistTypeStackTable()) {
           spdlog::error("Not found the type tables");
-          return {};
-        }
-      } else {
-        if (!Migr.isExistTypeStackTableV2()) {
-          spdlog::error("Not found the stack-table-v2.msgpack");
           return {};
         }
       }

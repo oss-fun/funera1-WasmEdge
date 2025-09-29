@@ -111,10 +111,10 @@ public:
 
   // helper function for type stack
   static inline uint32_t wasm_type_width(VType type) {
-    return type.has_value() ? type->getBitWidth() / 8 : 0;
+    return type.has_value() ? wasm_type_width(*type) : 0;
   }
   static inline uint32_t wasm_type_width(ValType type) {
-    return type.getBitWidth() / 8;
+    return type.getBitWidth() / 32;
   }
 
 private:
