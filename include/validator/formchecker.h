@@ -103,6 +103,10 @@ public:
   };
 
   /// Metadata for Wasm C/R
+  // NOTE: if this address map define after stacks, WasmEdge will crash.
+  AddressMap metadata_address_map;
+  uint32_t current_fidx;
+  bool is_code_validating = false;
   StackStateMap metadata_stack_map;
   Stack metadata_address_stack;
   Stack metadata_type_stack;

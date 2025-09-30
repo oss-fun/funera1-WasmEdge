@@ -37,22 +37,6 @@ namespace Executor {
     return checkpointFlag;
   }
 
-  std::vector<uint8_t> M::getTypeStackV2(uint32_t FuncIdx, uint32_t Offset, bool isTopFrame) {
-    uint32_t offset = (isTopFrame) ? Offset : Offset + 1;
-    StackTable table = get_stack_table(FuncIdx, offset);
-    std::vector<uint8_t> TypeStack(table.size);
-    for (size_t i = 0; i < table.size; i++) {
-      StackTableEntry entry = table.data[i];
-      TypeStack[i] = entry.ty;
-    }
-    return TypeStack;
-  }
-
-  bool M::isExistTypeStackTableV2() {
-    namespace fs = std::filesystem;
-    return fs::exists(ImageDir + "stack-table.msgpack");
-  }
-
   /// ================
   /// Dump functions
   /// ================
@@ -391,7 +375,7 @@ namespace Executor {
           }
 
           // Get current PC address
-          auto [currentFuncIdx, currentOffset] = getInstrAddrExpr(modInst, currentPC);
+          auto [currentFuncIdx, currentOffset] = getInstrAddrExpr(currentPC);
           CodePos pc = {
               .fidx = currentFuncIdx,
               .offset = currentOffset,
@@ -472,7 +456,8 @@ namespace Executor {
     // ifs.close();
 
 
-    AST::InstrView::iterator PC, From;
+    AST::InstrView::iterator PC;
+    AST::InstrView::iterator From = AST::InstrView::iterator(nullptr);
     // LenFrame-1から始まるのは、Stack{LenFrame}.imgがダミーフレームだから
     // From = StackMgr.popFrame();
     // for (size_t I = LenFrame; I > 0; --I) {

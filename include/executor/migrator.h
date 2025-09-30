@@ -48,32 +48,19 @@ public:
   // member functions. They are provided as free functions instead; see below.
 
   void Prepare(const Runtime::Instance::ModuleInstance* ModInst, std::string dirname);
-  uint32_t getFuncIdx(const AST::InstrView::iterator PC);
-  std::pair<uint32_t, uint32_t> getInstrAddrExpr(const Runtime::Instance::ModuleInstance *ModInst, AST::InstrView::iterator PC);
-  std::vector<uint8_t> getTypeStack(uint32_t FuncIdx, uint32_t Offset, bool IsRetAddr);
-  std::vector<uint8_t> getTypeStackV2(uint32_t FuncIdx, uint32_t Offset, bool IsTopFrame);
-  bool isExistTypeStackTable();
-  bool isExistTypeStackTableV2();
+  std::pair<uint32_t, uint32_t> getInstrAddrExpr(AST::InstrView::iterator PC);
 
   void debugFrame(uint32_t FrameIdx, uint32_t EnterFuncIdx, uint32_t Locals, uint32_t Arity, uint32_t VPos);
-
-  std::vector<struct CtrlInfo> getCtrlStack(const AST::InstrView::iterator PCNow,
-                                     Runtime::Instance::FunctionInstance *Func,
-                                     const std::vector<uint32_t> &WamrCellSums);
-
   void dumpMemoryV1(const Runtime::Instance::ModuleInstance* ModInst);
   void dumpMemoryV2(const Runtime::Instance::ModuleInstance* ModInst);
   void dumpGlobal(const Runtime::Instance::ModuleInstance* ModInst);
-  Expect<void> dumpProgramCounter(const Runtime::Instance::ModuleInstance* ModInst,
-                                  AST::InstrView::iterator Iter);
-  void dumpStackV1(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC);
+  Expect<void> dumpProgramCounter(AST::InstrView::iterator Iter);
   void dumpStackV2(Runtime::StackManager& StackMgr, AST::InstrView::iterator PC);
 
   void restoreMemoryV1(const Runtime::Instance::ModuleInstance* ModInst);
   void restoreMemoryV2(const Runtime::Instance::ModuleInstance* ModInst);
   void restoreGlobal(const Runtime::Instance::ModuleInstance* ModInst);
   Expect<AST::InstrView::iterator> restoreProgramCounter(const Runtime::Instance::ModuleInstance* ModInst);
-  Expect<void> restoreStackV1(Runtime::StackManager& StackMgr);
   Expect<void> restoreStackV2(Runtime::StackManager& StackMgr);
 
 private:

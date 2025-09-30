@@ -146,7 +146,7 @@ Expect<void> FormChecker::checkInstrs(AST::InstrView Instrs) {
       return Unexpect(Res);
     }
     // Save metadata stack
-    if (metadata_stack_map != NULL && metadata_address_stack != NULL && metadata_type_stack != NULL) {
+    if (is_code_validating) {
       if (Instr.getOpCode() == OpCode::Call || Instr.getOpCode() == OpCode::Call_indirect) {
         spdlog::debug("Saving type stack for fidx={}, offset={}\n", Instr.getTargetIndex(), getOffset(Instr.getOffset()+1));
         wasmig_stack_state_save_pair(metadata_stack_map, getOffset(Instr.getOffset()+1), 
@@ -155,6 +155,20 @@ Expect<void> FormChecker::checkInstrs(AST::InstrView Instrs) {
       spdlog::debug("Saving type stack for fidx={}, offset={}\n", Instr.getTargetIndex(), getOffset(Instr.getOffset()));
       wasmig_stack_state_save_pair(metadata_stack_map, getOffset(Instr.getOffset()), 
           metadata_address_stack, metadata_type_stack);
+    }
+    // Construct metadata address map
+    if (is_code_validating) {
+      const AST::Instruction* instrPtr = &Instr;
+      wasmig_debug("Adding address map for fidx=%d, offset=%d, instr=%p\n", current_fidx, getOffset(Instr.getOffset()), instrPtr);
+      uint32_t Offset = getOffset(Instr.getOffset());
+
+      // The instruction bit width differs between the validation phase and the execution phase.
+      // in validation phase, each instruction is 32 bits width
+      // in execution phase, each instruction is 1 unit width
+      // so, we need to convert the address accordingly
+      uint64_t InstrAddr = ((uint64_t)instrPtr - (uint64_t)baseInstr) / 32;
+      wasmig_address_map_set_backward(metadata_address_map, current_fidx, Offset, Instr.getOffset());
+      wasmig_address_map_set_forward(metadata_address_map, current_fidx, Offset, InstrAddr);
     }
   }
   return {};
@@ -2328,7 +2342,7 @@ void FormChecker::pushType(VType V) {
   ValStack.emplace_back(V); 
 
   // Push to metadata stack
-  if (metadata_address_stack != NULL && metadata_type_stack != NULL) {
+  if (is_code_validating) {
     metadata_address_stack = wasmig_stack_push(metadata_address_stack, LocalInits.size() + ValStack.size() - 1);
     metadata_type_stack = wasmig_stack_push(metadata_type_stack, wasm_type_width(V));
   }
@@ -2360,7 +2374,7 @@ Expect<VType> FormChecker::popType() {
   ValStack.pop_back();
 
   // Pop from metadata stack
-  if (metadata_address_stack != NULL && metadata_type_stack != NULL) {
+  if (is_code_validating) {
     metadata_address_stack = wasmig_stack_pop(metadata_address_stack, NULL);
     metadata_type_stack = wasmig_stack_pop(metadata_type_stack, NULL);
   }

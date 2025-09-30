@@ -690,11 +690,13 @@ Expect<void> Validator::validate(const AST::CodeSection &CodeSec) {
   const auto &FuncVec = Checker.getFunctions();
 
   // Validate function body.
+  Checker.is_code_validating = true;
   for (uint32_t Id = 0; Id < static_cast<uint32_t>(CodeVec.size()); ++Id) {
     // Init metadata stacks for each function validation.
     Checker.metadata_stack_map = wasmig_stack_state_map_create();
     Checker.metadata_address_stack = wasmig_stack_create();
     Checker.metadata_type_stack = wasmig_stack_create();
+    Checker.metadata_address_map = (!wasmig_address_map_exists() ? wasmig_address_map_create(0) : wasmig_address_map_load());
 
     // Added functions contains imported functions.
     uint32_t TId = Id + static_cast<uint32_t>(Checker.getNumImportFuncs());
@@ -705,6 +707,7 @@ Expect<void> Validator::validate(const AST::CodeSection &CodeSec) {
                                    static_cast<uint32_t>(FuncVec.size())));
       return Unexpect(ErrCode::Value::InvalidFuncIdx);
     }
+    Checker.current_fidx = TId;
     if (auto Res = validate(CodeVec[Id], FuncVec[TId]); !Res) {
       spdlog::error(ErrInfo::InfoAST(ASTNodeAttr::Seg_Code));
       return Unexpect(Res);
@@ -712,8 +715,11 @@ Expect<void> Validator::validate(const AST::CodeSection &CodeSec) {
   
     // register metadata stack
     wasmig_stack_state_map_registry_save(TId, Checker.metadata_stack_map);
+    wasmig_address_map_save(Checker.metadata_address_map);
     wasmig_debug("Function %d metadata stack registered", TId);
   }
+
+  Checker.is_code_validating = false;
   return {};
 }
 

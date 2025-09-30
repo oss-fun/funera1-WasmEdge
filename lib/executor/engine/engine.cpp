@@ -114,11 +114,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       std::cerr << "program counter, " << getTime(ts1, ts2) << std::endl;
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
-      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
-        Migr.restoreStackV1(StackMgr);
-      } else {
-        Migr.restoreStackV2(StackMgr);
-      }
+      Migr.restoreStackV2(StackMgr);
       clock_gettime(CLOCK_MONOTONIC, &ts2);
       std::cerr << "stack, " << getTime(ts1, ts2) << std::endl;
 
@@ -126,14 +122,10 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
       // 環境変数AFTER_RESTORE_DUMP=1を設定すると、リストア後にダンプする
       if (auto *env = std::getenv("AFTER_RESTORE_DUMP"); env && std::string(env) == "1") {
         std::cerr << "After restore dump" << std::endl;
-        if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
-          Migr.dumpStackV1(StackMgr, StartIt);
-        } else {
-          Migr.dumpStackV2(StackMgr, StartIt);
-        }
+        Migr.dumpProgramCounter(StartIt);
         Migr.dumpMemoryV2(StackMgr.getModule());
         Migr.dumpGlobal(StackMgr.getModule());
-        Migr.dumpProgramCounter(StackMgr.getModule(), StartIt);
+        Migr.dumpStackV2(StackMgr, StartIt);
       }
 
       RestoreFlag = false;
@@ -202,7 +194,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
     case OpCode::Nop:
       if (char* env = getenv("NOP_CKPT"); env && (std::string(env) == "1")) {
         setCheckpointFlag(1);
-        auto [FuncIdx, Offset] = Migr.getInstrAddrExpr(StackMgr.getModule(), PC);
+        auto [FuncIdx, Offset] = Migr.getInstrAddrExpr(PC);
         spdlog::info("Nop checkpoint at FuncIdx: {}, Offset: {}", FuncIdx, Offset);
       }
       return {};
@@ -2264,29 +2256,17 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
         isDumpMode: --no-checkpointオプションがない場合に1、ある場合に0が入る 
     */
     if (unlikely(getCheckpointFlag() & isDumpMode)) {
-      // the type stack table is necessary for CR v1
-      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
-        if (!Migr.isExistTypeStackTable()) {
-          spdlog::error("Not found the type tables");
-          return {};
-        }
-      }
 
       const AST::InstrView::iterator Iter = PC;
       // std::cout << "[DEBUG] (Iter, Iter->Offset, Iter->OpCode) = (" << Iter << ", " << Iter->getOffset() << ", " << OpCodeStr[Iter->getOpCode()] << ")" << std::endl;
 
       struct timespec tp_start, tp_end;
       clock_gettime(CLOCK_MONOTONIC, &tp_start);
-      // clock_gettime(CLOCK_MONOTONIC, &t_ts1);
-      // For WasmEdge
+
       Migr.dumpMemoryV2(StackMgr.getModule());
       Migr.dumpGlobal(StackMgr.getModule());
-      Migr.dumpProgramCounter(StackMgr.getModule(), Iter);
-      if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
-        Migr.dumpStackV1(StackMgr, Iter);
-      } else {
-        Migr.dumpStackV2(StackMgr, Iter);
-      }
+      Migr.dumpProgramCounter(Iter);
+      Migr.dumpStackV2(StackMgr, Iter);
       
       clock_gettime(CLOCK_MONOTONIC, &tp_end);
       double elapsed = (tp_end.tv_sec - tp_start.tv_sec) + (tp_end.tv_nsec - tp_start.tv_nsec);
@@ -2318,11 +2298,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
         }
         PC = Res.value();
         // StartIt += 1; // 保存は、前の命令と対応づけているので、復元時に+1
-        if (std::getenv("CR_V1") && std::string(std::getenv("CR_V1")) == "1") {
-          Migr.restoreStackV1(StackMgr);
-        } else {
-          Migr.restoreStackV2(StackMgr);
-        }
+        Migr.restoreStackV2(StackMgr);
 
         clock_gettime(CLOCK_MONOTONIC, &tp2_end);
         elapsed = (tp2_end.tv_sec - tp2_start.tv_sec) + (tp2_end.tv_nsec - tp2_start.tv_nsec);
