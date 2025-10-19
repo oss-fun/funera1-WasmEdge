@@ -1115,6 +1115,18 @@ WASMEDGE_CAPI_EXPORT extern void
 WasmEdge_StatisticsSetCostLimit(WasmEdge_StatisticsContext *Cxt,
                                 const uint64_t Limit);
 
+/// Set the time measuring option for the statistics.
+///
+/// This function is thread-safe.
+///
+/// \param Cxt the WasmEdge_ConfigureContext to set the boolean value.
+/// \param IsMeasure the boolean value to determine to support time when
+/// execution or not after compilation by the AOT compiler.
+// WASMEDGE_CAPI_EXPORT extern void 
+WASMEDGE_CAPI_EXPORT extern void
+WasmEdge_ConfigureStatisticsSetRestoreFlag(WasmEdge_ConfigureContext *Cxt,
+                                             const bool IsRestore);
+
 /// Clear all data in the WasmEdge_StatisticsContext.
 ///
 /// \param Cxt the WasmEdge_StatisticsContext to clear.

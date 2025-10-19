@@ -1098,6 +1098,14 @@ WasmEdge_StatisticsSetCostLimit(WasmEdge_StatisticsContext *Cxt,
 }
 
 WASMEDGE_CAPI_EXPORT void
+WasmEdge_ConfigureStatisticsSetRestoreFlag(WasmEdge_ConfigureContext *Cxt,
+                                             const bool IsRestore) {
+  if (Cxt) {
+    Cxt->Conf.getStatisticsConfigure().setRestoreFlag(IsRestore);
+  }
+}
+
+WASMEDGE_CAPI_EXPORT void
 WasmEdge_StatisticsClear(WasmEdge_StatisticsContext *Cxt) {
   if (Cxt) {
     fromStatCxt(Cxt)->clear();
