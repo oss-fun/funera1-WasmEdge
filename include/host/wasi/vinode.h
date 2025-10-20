@@ -696,6 +696,10 @@ public:
            (Inheriting & RequiredInheritingRights) == RequiredInheritingRights;
   }
 
+  int getFd() noexcept {
+    return Node.getFd();
+  }
+
 private:
   INode Node;
   __wasi_rights_t FsRightsBase;

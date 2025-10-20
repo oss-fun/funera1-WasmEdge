@@ -12,6 +12,9 @@
 #include "host/wasi/vinode.h"
 #include "wasi/api.hpp"
 
+//@
+#include "runtime/sockregistry.h"
+
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -24,6 +27,8 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#include <iostream>
 
 namespace WasmEdge {
 namespace Host {
@@ -914,15 +919,20 @@ public:
 
   WasiExpect<__wasi_fd_t> sockOpen(__wasi_address_family_t AddressFamily,
                                    __wasi_sock_type_t SockType) noexcept {
-
     std::shared_ptr<VINode> Node;
     if (auto Res = VINode::sockOpen(AddressFamily, SockType); unlikely(!Res)) {
       return WasiUnexpect(Res);
     } else {
       Node = std::move(*Res);
     }
-
-    return generateRandomFdToNode(Node);
+    auto Vfd = generateRandomFdToNode(Node);
+    if (!Vfd.has_value()){
+      return Vfd;
+    }
+    WasmEdge::Runtime::SocketRegistry::getInstance().setVSocket(Vfd.value());
+    WasmEdge::Runtime::SocketRegistry::getInstance().setSocket(Node->getFd());
+    spdlog::info("Env.sockOpen cached vfd={} fd={}", Vfd.value(), Node->getFd());
+    return Vfd;
   }
 
   WasiExpect<void> sockBind(__wasi_fd_t Fd,

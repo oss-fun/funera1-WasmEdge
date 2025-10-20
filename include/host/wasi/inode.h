@@ -53,7 +53,7 @@ struct FdHolder {
   FdHolder(const FdHolder &) = delete;
   FdHolder &operator=(const FdHolder &) = delete;
   FdHolder(FdHolder &&RHS) noexcept
-      : Fd(std::exchange(RHS.Fd, -1)), Cleanup(RHS.Cleanup) {}
+      : Fd(std::exchange(RHS.Fd, -1)), Cleanup(RHS.Cleanup), IsWasiSocket(RHS.IsWasiSocket) {}
   FdHolder &operator=(FdHolder &&RHS) noexcept {
     using std::swap;
     swap(Fd, RHS.Fd);
@@ -78,6 +78,7 @@ struct FdHolder {
   int getFd() noexcept { return Fd; }
   int Fd = -1;
   bool Cleanup = true;
+  bool IsWasiSocket = false;
 };
 
 struct DirHolder {

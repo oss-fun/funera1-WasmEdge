@@ -89,7 +89,6 @@ using TypeNN =
 
 } // namespace
 
-
 /// Executor flow control class.
 class Executor {
 public:
@@ -105,6 +104,7 @@ public:
     if (Stat) {
       Stat->setCostLimit(Conf.getStatisticsConfigure().getCostLimit());
     }
+    std::cout << "create Executor " << this << std::endl;
   }
   ~Executor() noexcept {
     ExecutionContext.StopToken = nullptr;
@@ -693,6 +693,13 @@ private:
   /// Migrator
   Migrator Migr;
   bool RestoreFlag = true;
+
+//@
+public:
+  static Executor* getThis() noexcept { return This; }
+  Migrator& getMigr() noexcept { return Migr; }
+  const Migrator& getMigr() const noexcept { return Migr; } 
+
 };
 
 } // namespace Executor

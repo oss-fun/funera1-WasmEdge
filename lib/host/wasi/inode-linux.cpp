@@ -19,6 +19,8 @@
 #include <string_view>
 #include <vector>
 
+#include <chrono>
+
 namespace WasmEdge {
 namespace Host {
 namespace WASI {
@@ -136,7 +138,14 @@ createNullTerminatedString(std::string_view View) noexcept {
 void FdHolder::reset() noexcept {
   if (likely(ok())) {
     if (likely(!isSpecialFd(Fd))) {
-      ::close(Fd);
+      if(IsWasiSocket){
+        std::cout << Fd << " is wasi socket skipping..." << std::endl;
+      } else {
+        auto now = std::chrono::time_point_cast<std::chrono::seconds>(std::chrono::system_clock::now());
+        std::time_t epoch = now.time_since_epoch().count();
+        std::cout << epoch << " FD close(" << Fd << ")" << std::endl;
+        ::close(Fd);
+      }
     }
     Fd = -1;
   }
@@ -876,6 +885,7 @@ WasiExpect<void> INode::getAddrinfo(std::string_view Node,
 
 WasiExpect<INode> INode::sockOpen(__wasi_address_family_t AddressFamily,
                                   __wasi_sock_type_t SockType) noexcept {
+  //IPPROTO_IP > IPPROTO_TCP
   int SysProtocol = IPPROTO_IP;
   int SysDomain = 0;
   int SysType = 0;
@@ -902,11 +912,16 @@ WasiExpect<INode> INode::sockOpen(__wasi_address_family_t AddressFamily,
     return WasiUnexpect(__WASI_ERRNO_INVAL);
   }
 
+  spdlog::info("socket(SysDomain = {}, SysType = {}, SysProtocol = {})", SysDomain, SysType, SysProtocol);
+
   if (auto NewFd = ::socket(SysDomain, SysType, SysProtocol);
       unlikely(NewFd < 0)) {
+    //spdlog::info("sock_open error");
     return WasiUnexpect(fromErrNo(errno));
   } else {
+    //spdlog::info("sock_open success {}", NewFd);
     INode New(NewFd);
+    New.IsWasiSocket = true;
     return New;
   }
 }
@@ -1167,6 +1182,7 @@ WasiExpect<void> INode::sockShutdown(__wasi_sdflags_t SdFlags) const noexcept {
   } else if (SdFlags == (__WASI_SDFLAGS_RD | __WASI_SDFLAGS_WR)) {
     SysFlags = SHUT_RDWR;
   }
+  spdlog::info("::shutdown {}", Fd);
 
   if (auto Res = ::shutdown(Fd, SysFlags); unlikely(Res < 0)) {
     return WasiUnexpect(fromErrNo(errno));

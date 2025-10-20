@@ -14,6 +14,8 @@
 #include <type_traits>
 #include <vector>
 
+#include <sstream>
+
 namespace WasmEdge {
 namespace Host {
 
@@ -1589,6 +1591,7 @@ Expect<uint32_t> WasiSockOpenV1::body(const Runtime::CallingFrame &Frame,
                                       uint32_t AddressFamily, uint32_t SockType,
                                       uint32_t /* Out */ RoFdPtr) {
   // Check memory instance from module.
+  //spdlog::info("call WasiSockOpenV1");
   auto *MemInst = Frame.getMemoryByIndex(0);
   if (MemInst == nullptr) {
     return __WASI_ERRNO_FAULT;
@@ -1626,6 +1629,8 @@ Expect<uint32_t> WasiSockOpenV1::body(const Runtime::CallingFrame &Frame,
 Expect<uint32_t> WasiSockBindV1::body(const Runtime::CallingFrame &Frame,
                                       int32_t Fd, uint32_t AddressPtr,
                                       uint32_t Port) {
+  //spdlog::info("call WasiSockBindV1");
+  //spdlog::info("AddresPtr = {}, Port = {}", AddressPtr, Port);
   // Check memory instance from module.
   auto *MemInst = Frame.getMemoryByIndex(0);
   if (MemInst == nullptr) {
@@ -1644,6 +1649,7 @@ Expect<uint32_t> WasiSockBindV1::body(const Runtime::CallingFrame &Frame,
   }
 
   __wasi_address_family_t WasiAddressFamily;
+  //spdlog::info("Address.size() = {}", Address.size());
   switch (Address.size()) {
   case 4:
     WasiAddressFamily = __WASI_ADDRESS_FAMILY_INET4;
@@ -1657,16 +1663,27 @@ Expect<uint32_t> WasiSockBindV1::body(const Runtime::CallingFrame &Frame,
 
   const __wasi_fd_t WasiFd = Fd;
 
+std::ostringstream oss;
+for (size_t i = 0; i < Address.size(); i++) {
+  if (i > 0) oss << ".";
+  oss << static_cast<int>(Address[i]); // u8 → int にキャストして出力
+}
+
+std::string addr_str = oss.str();
+  //spdlog::info("call Env.SockBind(WasiFd = {}, WasiAddressFamily = {}, Address = {}, Port = {})", WasiFd, static_cast<int>(WasiAddressFamily), addr_str, Port);
+
   if (auto Res = Env.sockBind(WasiFd, WasiAddressFamily, Address,
                               static_cast<uint16_t>(Port));
       unlikely(!Res)) {
     return Res.error();
   }
+  //spdlog::info("sock_bind success");
   return __WASI_ERRNO_SUCCESS;
 }
 
 Expect<uint32_t> WasiSockListenV1::body(const Runtime::CallingFrame &,
                                         int32_t Fd, int32_t Backlog) {
+  //spdlog::info("call WasiSockListenV1");
   const __wasi_fd_t WasiFd = Fd;
   if (auto Res = Env.sockListen(WasiFd, Backlog); unlikely(!Res)) {
     return Res.error();
@@ -1677,6 +1694,7 @@ Expect<uint32_t> WasiSockListenV1::body(const Runtime::CallingFrame &,
 Expect<uint32_t> WasiSockAcceptV1::body(const Runtime::CallingFrame &Frame,
                                         int32_t Fd,
                                         uint32_t /* Out */ RoFdPtr) {
+  //spdlog::info("call WasiSockAcceptV1");
   // Check memory instance from module.
   auto *MemInst = Frame.getMemoryByIndex(0);
   if (MemInst == nullptr) {
@@ -1700,6 +1718,7 @@ Expect<uint32_t> WasiSockAcceptV1::body(const Runtime::CallingFrame &Frame,
 Expect<uint32_t> WasiSockAcceptV2::body(const Runtime::CallingFrame &Frame,
                                         int32_t Fd, uint32_t FsFlags,
                                         uint32_t /* Out */ RoFdPtr) {
+  //spdlog::info("call WasiSockAcceptV2");
   // Check memory instance from module.
   auto *MemInst = Frame.getMemoryByIndex(0);
   if (MemInst == nullptr) {
@@ -1925,6 +1944,7 @@ Expect<uint32_t> WasiSockSendV1::body(const Runtime::CallingFrame &Frame,
                                       int32_t Fd, uint32_t SiDataPtr,
                                       uint32_t SiDataLen, uint32_t SiFlags,
                                       uint32_t /* Out */ SoDataLenPtr) {
+  //spdlog::info("call WasiSockSendV1");
   // Check memory instance from module.
   auto *MemInst = Frame.getMemoryByIndex(0);
   if (MemInst == nullptr) {
@@ -2075,6 +2095,7 @@ Expect<uint32_t> WasiSockSendToV1::body(const Runtime::CallingFrame &Frame,
 
 Expect<uint32_t> WasiSockShutdown::body(const Runtime::CallingFrame &,
                                         int32_t Fd, uint32_t SdFlags) {
+  //spdlog::info("call WasiSockShutdown");
   __wasi_sdflags_t WasiSdFlags;
   if (auto Res = cast<__wasi_sdflags_t>(SdFlags); unlikely(!Res)) {
     return Res.error();
@@ -2435,6 +2456,7 @@ Expect<uint32_t> WasiSockGetPeerAddrV1::body(const Runtime::CallingFrame &Frame,
 Expect<uint32_t> WasiSockOpenV2::body(const Runtime::CallingFrame &Frame,
                                       uint32_t AddressFamily, uint32_t SockType,
                                       uint32_t /* Out */ RoFdPtr) {
+  //spdlog::info("call WasiSockOpenV2");
   // Check memory instance from module.
   auto *MemInst = Frame.getMemoryByIndex(0);
   if (MemInst == nullptr) {
@@ -2473,6 +2495,7 @@ Expect<uint32_t> WasiSockOpenV2::body(const Runtime::CallingFrame &Frame,
 Expect<uint32_t> WasiSockBindV2::body(const Runtime::CallingFrame &Frame,
                                       int32_t Fd, uint32_t AddressPtr,
                                       uint32_t Port) {
+  //spdlog::info("call WasiSockBindV2");
   // Check memory instance from module.
   auto *MemInst = Frame.getMemoryByIndex(0);
   if (MemInst == nullptr) {
@@ -2510,7 +2533,6 @@ Expect<uint32_t> WasiSockBindV2::body(const Runtime::CallingFrame &Frame,
   }
 
   const __wasi_fd_t WasiFd = Fd;
-
   if (auto Res = Env.sockBind(WasiFd, WasiAddressFamily, Address,
                               static_cast<uint16_t>(Port));
       unlikely(!Res)) {
@@ -2521,6 +2543,7 @@ Expect<uint32_t> WasiSockBindV2::body(const Runtime::CallingFrame &Frame,
 
 Expect<uint32_t> WasiSockListenV2::body(const Runtime::CallingFrame &,
                                         int32_t Fd, int32_t Backlog) {
+  //spdlog::info("call WasiSockListenV2");
   const __wasi_fd_t WasiFd = Fd;
   if (auto Res = Env.sockListen(WasiFd, Backlog); unlikely(!Res)) {
     return Res.error();
@@ -2755,6 +2778,7 @@ Expect<uint32_t> WasiSockSendV2::body(const Runtime::CallingFrame &Frame,
                                       int32_t Fd, uint32_t SiDataPtr,
                                       uint32_t SiDataLen, uint32_t SiFlags,
                                       uint32_t /* Out */ SoDataLenPtr) {
+  //spdlog::info("call WasiSockSendV2");
   // Check memory instance from module.
   auto *MemInst = Frame.getMemoryByIndex(0);
   if (MemInst == nullptr) {
@@ -3045,5 +3069,70 @@ Expect<uint32_t> WasiSockGetPeerAddrV2::body(const Runtime::CallingFrame &Frame,
   *RoPort = Port;
   return __WASI_ERRNO_SUCCESS;
 }
+
+//@ compatible WAMR
+
+Expect<uint32_t> WasiSockOpenCompatShim::body(const Runtime::CallingFrame &Frame,
+                        uint32_t PoolFd, 
+                        uint32_t AddressFamily, uint32_t SockType,
+                        uint32_t /* Out */ RoFdPtr) {
+  //spdlog::info("call WasiSockOpenCompatShim");
+  (void)PoolFd;
+  if (AddressFamily == 0) {
+    AddressFamily = 1;
+  }
+  if (SockType == 1){
+    SockType = 2;
+  }
+  return WasiSockOpenV1(Env).body(Frame, AddressFamily, SockType, RoFdPtr);
+}
+
+Expect<uint32_t> WasiSockBindCompatShim::body(const Runtime::CallingFrame &Frame, int32_t Fd,
+                        uint32_t AddressPtr) {
+  //spdlog::info("call WasiSockBindCompatShim");
+
+  auto *MemInst = Frame.getMemoryByIndex(0);
+  if (!MemInst) {
+    return __WASI_ERRNO_FAULT;
+  }
+  // Rust 側から渡された __wasi_addr_t 構造体を取得
+  __compat_wasi_addr_t *InnerAddress =
+      MemInst->getPointer<__compat_wasi_addr_t *>(AddressPtr);
+  if (!InnerAddress) {
+    //spdlog::error("failed to get pointer for wasi_addr_t");
+    return __WASI_ERRNO_FAULT;
+  }
+
+  uint32_t addr_len;
+  switch (InnerAddress->kind) {
+  case 0: // IPv4
+    addr_len = 4;
+    break;
+  case 1: // IPv6
+    addr_len = 16;
+    break;
+  default:
+    //spdlog::error("unsupported address kind {}", InnerAddress->kind);
+    return __WASI_ERRNO_INVAL;
+  }
+
+  //ポートを取り出す
+  uint16_t port = InnerAddress->u.port;
+
+  uint32_t addr_ptr_for_v1 = AddressPtr + 4; //kind部分を無視する4byteオフセット
+
+  uint8_t *dst = MemInst->getPointer<uint8_t *>(addr_ptr_for_v1); //dst = addr先頭
+  if (!dst) {
+    return __WASI_ERRNO_FAULT;
+  }
+
+  uint32_t *len_ptr = reinterpret_cast<uint32_t*>(dst + addr_len); //addr先頭 + addr_len = portフィールド部分
+  *len_ptr = addr_len; //buf_lenに対応するようアドレス長に書き換え
+
+  //spdlog::info("AddrPtr(V1) = {} (was {} + 4), Port = {}, Address.size() = {}", addr_ptr_for_v1, AddressPtr, port, addr_len);
+
+  return WasiSockBindV1(Env).body(Frame, Fd, addr_ptr_for_v1, port);
+}
+
 } // namespace Host
 } // namespace WasmEdge

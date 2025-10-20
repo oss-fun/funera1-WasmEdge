@@ -102,6 +102,10 @@ WasiModule::WasiModule() : ModuleInstance("wasi_snapshot_preview1") {
   addHostFunc("sock_getpeeraddr_v2",
               std::make_unique<WasiSockGetPeerAddrV2>(Env));
   addHostFunc("sock_getaddrinfo", std::make_unique<WasiSockGetAddrinfo>(Env));
+
+  //@ compatible WAMR
+  addHostFunc("sock_open", std::make_unique<WasiSockOpenCompatShim>(Env));
+  addHostFunc("sock_bind", std::make_unique<WasiSockBindCompatShim>(Env));
 }
 
 } // namespace Host

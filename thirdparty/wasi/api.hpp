@@ -2034,3 +2034,27 @@ static_assert(sizeof(__wasi_prestat_t) == 8, "witx calculated size");
 static_assert(alignof(__wasi_prestat_t) == 4, "witx calculated align");
 static_assert(offsetof(__wasi_prestat_t, u) == 4,
               "witx calculated union offset");
+
+
+/**
+ * Compatible WAMR type.
+ */
+
+using __compat_wasi_ip_port_t = uint16_t;
+
+struct __compat_wasi_addr_ip4_t {
+    uint8_t n0;
+    uint8_t n1;
+    uint8_t n2;
+    uint8_t n3;
+};
+
+struct __compat_wasi_addr_ip4_port_t {
+    __compat_wasi_addr_ip4_t addr;
+    __compat_wasi_ip_port_t port; 
+};
+
+struct __compat_wasi_addr_t {
+    int32_t kind; 
+    __compat_wasi_addr_ip4_port_t u;
+};

@@ -9,13 +9,18 @@
 #include <signal.h>
 #include <fcntl.h>
 
+#include <thread>
+
 namespace WasmEdge {
 namespace Executor {
 
 // TODO: signumの処理無駄なのでどうにかする
 volatile sig_atomic_t DumpFlag;
+volatile sig_atomic_t Signal;
 void signalHandler(int signum) {
   DumpFlag = signum|1;
+  //signal判別用
+  Signal = signum;
 }
 
 int64_t getTime(timespec ts1) {
@@ -164,6 +169,7 @@ Executor::runFunction(Runtime::StackManager &StackMgr,
 Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
                                const AST::InstrView::iterator Start,
                                const AST::InstrView::iterator End) {
+  //std::cout << "run execute" << std::endl;
   AST::InstrView::iterator PC = Start;
   AST::InstrView::iterator PCEnd = End;
 
@@ -1901,12 +1907,17 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
   sa.sa_handler = signalHandler;
   sigaction(SIGUSR1, &sa, nullptr);
   sigaction(SIGTERM, &sa, nullptr);
+  sigaction(SIGINT, &sa, nullptr);
+  
+  //std::thread::id tid = std::this_thread::get_id();
+  //std::cout << "Executor thread ID: " << tid << " & instance " << this << std::endl;
 
   const uint8_t isInstructionCounting = Conf.getStatisticsConfigure().isInstructionCounting();
   const uint8_t isCostMeasuring = Conf.getStatisticsConfigure().isCostMeasuring();
   const uint8_t isDumpMode = !Conf.getStatisticsConfigure().getDumpFlag();
   // int dispatch_count = 0;
   // int dispatch_limit = 1000;
+
 
   while (PC != PCEnd) {
     // dispatch_count++;
@@ -1942,25 +1953,32 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpMemory(StackMgr.getModule());
       clock_gettime(CLOCK_MONOTONIC, &ts2);
-      spdlog::debug("memory, %d", getTime(ts1, ts2));
+      spdlog::info("memory, %d", getTime(ts1, ts2));
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpGlobal(StackMgr.getModule());
       clock_gettime(CLOCK_MONOTONIC, &ts2);
-      spdlog::debug("global, %d", getTime(ts1, ts2));
+      spdlog::info("global, %d", getTime(ts1, ts2));
 
       // std::cerr << "Success dumpGlobal" << std::endl;
       clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpProgramCounter(StackMgr.getModule(), PC);
       clock_gettime(CLOCK_MONOTONIC, &ts2);
-      spdlog::debug("program counter, %d", getTime(ts1, ts2));
+      spdlog::info("program counter, %d", getTime(ts1, ts2));
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpStack(StackMgr, PC);
       clock_gettime(CLOCK_MONOTONIC, &ts2);
-      spdlog::debug("stack, %d", getTime(ts1, ts2));
+      spdlog::info("stack, %d", getTime(ts1, ts2));
+
+      Migr.dumpSocket();
+
+      sleep(100);
       
       DumpFlag = false;
+      if (Signal == SIGTERM || Signal == SIGINT){
+        return Unexpect(ErrCode::Value::CheckpointExecStates);
+      }
       // return Unexpect(ErrCode::Value::CheckpointExecStates);
     }
 

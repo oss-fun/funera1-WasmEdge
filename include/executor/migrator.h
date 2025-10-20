@@ -5,6 +5,7 @@
 #include "runtime/instance/function.h"
 #include "runtime/stackmgr.h"
 #include "runtime/storemgr.h"
+#include "runtime/sockregistry.h"
 #include "executor/executor.h"
 
 #include <map>
@@ -12,6 +13,11 @@
 #include <vector>
 #include <string>
 #include <cassert>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+#include <cstring>
+#include <stdexcept>
 
 namespace WasmEdge {
   
@@ -362,6 +368,64 @@ public:
       // debug
       // debugFrame(I, EnterFuncIdx, f.Locals, f.Arity, f.VPos);
     }
+  }
+
+  void dumpSocket() {
+    int unix_sock = ::socket(AF_UNIX, SOCK_STREAM, 0);
+    if (unix_sock < 0) {
+      std::perror("socket");
+      exit(1);
+    }
+    sockaddr_un unaddr = {};
+    unaddr.sun_family = AF_UNIX;
+    std::strncpy(unaddr.sun_path, "/tmp/fdpass.sock", sizeof(unaddr.sun_path) - 1);
+    if (connect(unix_sock, reinterpret_cast<sockaddr*>(&unaddr), sizeof(unaddr)) < 0) {
+      std::perror("connect");
+      exit(1);
+    }
+    try {
+      int fd = WasmEdge::Runtime::SocketRegistry::getInstance().getSocket(); 
+
+      struct msghdr msg = {};
+      char buf[CMSG_SPACE(sizeof(fd))] = {};
+      const char data = 'F';
+      struct iovec io = {
+        .iov_base = const_cast<char*>(&data),
+        .iov_len = sizeof(data)
+      };
+      msg.msg_iov = &io;
+      msg.msg_iovlen = 1;
+      msg.msg_control = buf;
+      msg.msg_controllen = sizeof(buf);
+
+      struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+      cmsg->cmsg_level = SOL_SOCKET;
+      cmsg->cmsg_type  = SCM_RIGHTS;
+      cmsg->cmsg_len   = CMSG_LEN(sizeof(fd));
+
+      std::memcpy(CMSG_DATA(cmsg), &fd, sizeof(fd));
+      if (sendmsg(unix_sock, &msg, 0) < 0) {
+        throw std::runtime_error("sendmsg() failed: " + std::string(std::strerror(errno)));
+      }
+      /*char ack;
+      ssize_t n = ::recv(unix_sock, &ack, 1, 0);
+      if (n < 0) {
+        throw std::runtime_error("recv ACK failed: " + std::string(std::strerror(errno)));
+      }
+      if (ack != 'O') {  // 任意の確認文字
+        throw std::runtime_error("unexpected ACK value");
+      }
+      */
+      ::close(fd);
+      std::cout << "FD sent successfully." << fd << std::endl;
+    } catch (const std::exception& e) {
+      std::cerr << e.what() << std::endl;
+    }
+    close(unix_sock);
+    return;
+
+    //std::cout << "touched Vsocket: " << WasmEdge::Runtime::SocketRegistry::getInstance().getVSocket() << std::endl;
+    //std::cout << "touched socket: " << WasmEdge::Runtime::SocketRegistry::getInstance().getSocket() << std::endl;
   }
   
   /// ================

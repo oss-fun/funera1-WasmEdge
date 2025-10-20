@@ -87,6 +87,22 @@ Expect<void> Executor::runCallOp(Runtime::StackManager &StackMgr,
   // Get Function address.
   const auto *ModInst = StackMgr.getModule();
   const auto *FuncInst = *ModInst->getFunc(Instr.getTargetIndex());
+  /*
+  if (FuncInst->isHostFunction()) {
+    const auto *OwnerMod = FuncInst->getModule();
+    if (OwnerMod) {
+      OwnerMod->getFuncExports([&](const auto &exports) {
+        for (const auto &kv : exports) {
+          const auto &name = kv.first;
+          auto funcPtr = kv.second; 
+          if (funcPtr == const_cast<Runtime::Instance::FunctionInstance*>(FuncInst)) {
+            spdlog::info("call host function: {}", name);
+            break;
+          }
+        }
+      });
+    }
+  }*/
   // std::cout << "[DEBUG]enter function idx: " << Instr.getTargetIndex() << std::endl;
   if (auto Res = enterFunction(StackMgr, *FuncInst, PC + 1, IsTailCall); !Res) {
     return Unexpect(Res);

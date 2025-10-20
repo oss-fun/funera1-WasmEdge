@@ -593,5 +593,24 @@ public:
                         uint32_t AddressPtr, uint32_t PortPtr);
 };
 
+//@ compatible WAMR
+
+class WasiSockOpenCompatShim : public Wasi<WasiSockOpenCompatShim> {
+public: 
+  WasiSockOpenCompatShim(WASI::Environ &HostEnv) : Wasi(HostEnv) {}
+  Expect<uint32_t> body(const Runtime::CallingFrame &Frame,
+                        uint32_t PoolFd, 
+                        uint32_t AddressFamily, uint32_t SockType,
+                        uint32_t /* Out */ RoFdPtr);
+};
+
+class WasiSockBindCompatShim : public Wasi<WasiSockBindCompatShim> {
+public:
+  WasiSockBindCompatShim(WASI::Environ &HostEnv) : Wasi(HostEnv) {}
+
+  Expect<uint32_t> body(const Runtime::CallingFrame &Frame, int32_t Fd,
+                        uint32_t AddressPtr);
+};
+
 } // namespace Host
 } // namespace WasmEdge
