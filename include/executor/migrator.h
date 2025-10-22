@@ -407,6 +407,7 @@ public:
       if (sendmsg(unix_sock, &msg, 0) < 0) {
         throw std::runtime_error("sendmsg() failed: " + std::string(std::strerror(errno)));
       }
+      std::cout << "FD sent " << fd << std::endl;
       /*char ack;
       ssize_t n = ::recv(unix_sock, &ack, 1, 0);
       if (n < 0) {
@@ -416,12 +417,16 @@ public:
         throw std::runtime_error("unexpected ACK value");
       }
       */
+      /*std::cout << "Press ENTER to start closing" << std::endl;
+      getchar();
+      std::cout << "close fd " << fd << std::endl;
       ::close(fd);
-      std::cout << "FD sent successfully." << fd << std::endl;
+      sleep(5);
+      */
     } catch (const std::exception& e) {
       std::cerr << e.what() << std::endl;
     }
-    close(unix_sock);
+    ::close(unix_sock);
     return;
 
     //std::cout << "touched Vsocket: " << WasmEdge::Runtime::SocketRegistry::getInstance().getVSocket() << std::endl;

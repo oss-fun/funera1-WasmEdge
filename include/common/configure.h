@@ -204,6 +204,14 @@ public:
     return RestoreFlag.load(std::memory_order_relaxed);
   }
 
+  void setRestoreSocketFlag(bool flag) noexcept {
+    RestoreSocketFlag.store(flag, std::memory_order_relaxed);
+  }
+
+  bool getRestoreSocketFlag() const noexcept {
+    return RestoreSocketFlag.load(std::memory_order_relaxed);
+  }
+
   void setDebugMode(bool flag) noexcept {
     DebugMode.store(flag, std::memory_order_relaxed);
   }
@@ -218,6 +226,7 @@ private:
   std::atomic<bool> TimeMeasuring = false;
   std::atomic<bool> DumpFlag      = false;
   std::atomic<bool> RestoreFlag   = false;
+  std::atomic<bool> RestoreSocketFlag = false;
   std::atomic<bool> DebugMode     = false;
   std::atomic<uint64_t> CostLimit = UINT64_C(-1);
 

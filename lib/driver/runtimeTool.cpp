@@ -89,6 +89,10 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
   if (Opt.RestoreFlag.value()) {
     Conf.getStatisticsConfigure().setRestoreFlag(true);
   }
+  if (Opt.RestoreSocketFlag.value()){
+    Conf.getStatisticsConfigure().setRestoreFlag(true);
+    Conf.getStatisticsConfigure().setRestoreSocketFlag(true);
+  }
   if (Opt.DebugMode.value()) {
     Conf.getStatisticsConfigure().setDebugMode(true);
   }
@@ -169,6 +173,9 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
           .replace_extension(std::filesystem::u8path("wasm"sv))
           .u8string(),
       Opt.Args.value(), Opt.Env.value());
+
+  auto sockrestore = Opt.RestoreSocketFlag;
+  std::cout << "sockrestore = " << sockrestore.value() << std::endl;
 
   if (EnterCommandMode) {
     // command mode

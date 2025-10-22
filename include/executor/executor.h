@@ -104,7 +104,6 @@ public:
     if (Stat) {
       Stat->setCostLimit(Conf.getStatisticsConfigure().getCostLimit());
     }
-    std::cout << "create Executor " << this << std::endl;
   }
   ~Executor() noexcept {
     ExecutionContext.StopToken = nullptr;

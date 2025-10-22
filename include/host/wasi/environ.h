@@ -926,12 +926,13 @@ public:
       Node = std::move(*Res);
     }
     auto Vfd = generateRandomFdToNode(Node);
-    if (!Vfd.has_value()){
+    /*if (!Vfd.has_value()){
       return Vfd;
     }
     WasmEdge::Runtime::SocketRegistry::getInstance().setVSocket(Vfd.value());
     WasmEdge::Runtime::SocketRegistry::getInstance().setSocket(Node->getFd());
     spdlog::info("Env.sockOpen cached vfd={} fd={}", Vfd.value(), Node->getFd());
+    */
     return Vfd;
   }
 
@@ -967,7 +968,14 @@ public:
       NewNode = std::move(*Res);
     }
 
-    return generateRandomFdToNode(NewNode);
+    auto Vfd = generateRandomFdToNode(NewNode);
+    if (!Vfd.has_value()){
+      return Vfd;
+    }
+    WasmEdge::Runtime::SocketRegistry::getInstance().setVSocket(Vfd.value());
+    WasmEdge::Runtime::SocketRegistry::getInstance().setSocket(NewNode->getFd());
+    spdlog::info("Env.sockAccept cached vfd={} fd={}", Vfd.value(), NewNode->getFd());
+    return Vfd;
   }
 
   WasiExpect<void> sockConnect(__wasi_fd_t Fd,
