@@ -174,32 +174,32 @@ jobs:
           (cd ${nnrpc_test_dir} && ./${test_bin} --gtest_filter=WasiNNTest.GGMLBackendComputeSingleWithRPC)
           kill -9 "$RPC_SERVER_PID"
       - name: Upload artifact - wasi_nn-pytorch
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasi_nn-pytorch-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasi_nn-pytorch.tar.gz
       - name: Upload artifact - wasi_nn-openvino
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasi_nn-openvino-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasi_nn-openvino.tar.gz
       - name: Upload artifact - wasi_nn-tensorflowlite
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasi_nn-tensorflowlite-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasi_nn-tensorflowlite.tar.gz
       - name: Upload artifact - wasi_nn-ggml
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasi_nn-ggml-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasi_nn-ggml.tar.gz
       - name: Upload artifact - wasi_nn-piper
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasi_nn-piper-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasi_nn-piper.tar.gz
       - name: Upload artifact - wasi_nn-whisper
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasi_nn-whisper-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasi_nn-whisper.tar.gz
@@ -264,12 +264,12 @@ jobs:
             tar -zcvf plugin_${plugin_array[$i]}.tar.gz ${output_bin}
           done
       - name: Upload artifact - wasi_nn-tensorflowlite
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasi_nn-tensorflowlite-${{ needs.get_version.outputs.version }}-${{ matrix.darwin_version }}_${{ matrix.arch }}.tar.gz
           path: plugin_wasi_nn-tensorflowlite.tar.gz
       - name: Upload artifact - wasi_nn-whisper
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasi_nn-whisper-${{ needs.get_version.outputs.version }}-${{ matrix.darwin_version }}_${{ matrix.arch }}.tar.gz
           path: plugin_wasi_nn-whisper.tar.gz
@@ -329,7 +329,7 @@ jobs:
           Compress-Archive -Path "$Env:output_bin" -DestinationPath "plugin_${Env:tar_names}.zip" -CompressionLevel Optimal
           ls "plugin_${Env:tar_names}.zip"
       - name: Upload artifact - wasi_nn-ggml
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasi_nn-ggml-${{ needs.get_version.outputs.version }}-windows.zip
           path: plugin_wasi_nn-ggml.zip
@@ -417,57 +417,57 @@ jobs:
             tar -zcvf plugin_${plugin_array[$i]}.tar.gz ${outbin_array[$i]}
           done
       - name: Upload artifact - wasi_crypto
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasi_crypto-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasi_crypto.tar.gz
       - name: Upload artifact - wasmedge_process
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_process-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasmedge_process.tar.gz
       - name: Upload artifact - wasmedge_tensorflow
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_tensorflow-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasmedge_tensorflow.tar.gz
       - name: Upload artifact - wasmedge_tensorflowlite
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_tensorflowlite-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasmedge_tensorflowlite.tar.gz
       - name: Upload artifact - wasmedge_image
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_image-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasmedge_image.tar.gz
       - name: Upload artifact - wasm_bpf
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasm_bpf-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasm_bpf.tar.gz
       - name: Upload artifact - wasmedge_opencvmini
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_opencvmini-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasmedge_opencvmini.tar.gz
       - name: Upload artifact - wasmedge_zlib
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_zlib-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasmedge_zlib.tar.gz
       - name: Upload artifact - wasmedge_ffmpeg
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_ffmpeg-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasmedge_ffmpeg.tar.gz
       - name: Upload artifact - wasmedge_stablediffusion
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_stablediffusion-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasmedge_stablediffusion.tar.gz
       - name: Upload artifact - wasmedge_llmc
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_llmc-${{ needs.get_version.outputs.version }}-ubuntu22.04-${{ matrix.compiler }}.tar.gz
           path: plugin_wasmedge_llmc.tar.gz
@@ -539,7 +539,7 @@ jobs:
             tar -zcvf plugin_${plugin_array[$i]}.tar.gz ${outbin_array[$i]}
           done
       - name: Upload artifact - wasmedge_stablediffusion
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_stablediffusion-cuda-${{ matrix.cuda_version }}-${{ needs.get_version.outputs.version }}-ubuntu20.04_x86_64.tar.gz
           path: plugin_wasmedge_stablediffusion.tar.gz
@@ -632,43 +632,43 @@ jobs:
             tar -zcvf plugin_${plugin_array[$i]}.tar.gz ${outbin_array[$i]}
           done
       - name: Upload artifact - wasi_crypto
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasi_crypto-${{ needs.get_version.outputs.version }}-${{ matrix.darwin_version }}_${{ matrix.arch }}.tar.gz
           path: plugin_wasi_crypto.tar.gz
       - name: Upload artifact - wasmedge_tensorflow
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_tensorflow-${{ needs.get_version.outputs.version }}-${{ matrix.darwin_version }}_${{ matrix.arch }}.tar.gz
           path: plugin_wasmedge_tensorflow.tar.gz
       - name: Upload artifact - wasmedge_tensorflowlite
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_tensorflowlite-${{ needs.get_version.outputs.version }}-${{ matrix.darwin_version }}_${{ matrix.arch }}.tar.gz
           path: plugin_wasmedge_tensorflowlite.tar.gz
       - name: Upload artifact - wasmedge_image
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_image-${{ needs.get_version.outputs.version }}-${{ matrix.darwin_version }}_${{ matrix.arch }}.tar.gz
           path: plugin_wasmedge_image.tar.gz
       - name: Upload artifact - wasmedge_opencvmini
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_opencvmini-${{ needs.get_version.outputs.version }}-${{ matrix.darwin_version }}_${{ matrix.arch }}.tar.gz
           path: plugin_wasmedge_opencvmini.tar.gz
       - name: Upload artifact - wasmedge_ffmpeg
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_ffmpeg-${{ needs.get_version.outputs.version }}-${{ matrix.darwin_version }}_${{ matrix.arch }}.tar.gz
           path: plugin_wasmedge_ffmpeg.tar.gz
       - name: Upload artifact - wasmedge_stablediffusion
         if: ${{ matrix.arch != 'arm64' }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_stablediffusion-${{ needs.get_version.outputs.version }}-${{ matrix.darwin_version }}_${{ matrix.arch }}.tar.gz
           path: plugin_wasmedge_stablediffusion.tar.gz
       - name: Upload artifact - wasmedge_llmc
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_llmc-${{ needs.get_version.outputs.version }}-${{ matrix.darwin_version }}_${{ matrix.arch }}.tar.gz
           path: plugin_wasmedge_llmc.tar.gz
@@ -736,7 +736,7 @@ jobs:
             tar -zcvf plugin_${plugin_array[$i]}.tar.gz "${outbin_array[$i]}" "ggml-metal.metal" "ggml-common.h"
           done
       - name: Upload artifact - wasmedge_stablediffusion
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: WasmEdge-plugin-wasmedge_stablediffusion-${{ needs.get_version.outputs.version }}-${{ matrix.darwin_version }}_${{ matrix.arch }}.tar.gz
           path: plugin_wasmedge_stablediffusion.tar.gz
