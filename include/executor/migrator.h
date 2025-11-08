@@ -78,8 +78,17 @@ private:
 };
 
 // Global checkpoint flag helpers (free functions implemented in migrator_v2.cpp)
-bool setCheckpointFlag(bool flag);
-bool getCheckpointFlag();
+// bool setCheckpointFlag(bool flag);
+// bool getCheckpointFlag();
+static bool checkpointFlag = false;
+__attribute__((always_inline)) inline bool setCheckpointFlag(bool flag) {
+  checkpointFlag = flag;
+  return true;
+}
+__attribute__((always_inline)) inline bool getCheckpointFlag() {
+  return checkpointFlag;
+}
+
 
 } // namespace Executor
 } // namespace WasmEdge

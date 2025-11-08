@@ -10,6 +10,8 @@
 #include <signal.h>
 #include <fcntl.h>
 
+#define WASMIG_ENABLE_CHECKPOINTS 1
+
 namespace WasmEdge {
 namespace Executor {
 
@@ -2226,7 +2228,9 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
 
   const uint8_t isInstructionCounting = Conf.getStatisticsConfigure().isInstructionCounting();
   const uint8_t isCostMeasuring = Conf.getStatisticsConfigure().isCostMeasuring();
-  const uint8_t isDumpMode = !Conf.getStatisticsConfigure().getDumpFlag();
+#if WASMIG_ENABLE_CHECKPOINTS != 0
+  // const uint8_t isDumpMode = !Conf.getStatisticsConfigure().getDumpFlag();
+#endif
   // int dispatch_count = 0;
   // int dispatch_limit = 1000;
 
@@ -2255,7 +2259,9 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
         DumpFlag: checkpointシグナルを受け取ったときに1が代入される。受け取るまでは0が入る。
         isDumpMode: --no-checkpointオプションがない場合に1、ある場合に0が入る 
     */
-    if (unlikely(getCheckpointFlag() & isDumpMode)) {
+#if WASMIG_ENABLE_CHECKPOINTS != 0
+    // if (unlikely(getCheckpointFlag() & isDumpMode)) {
+    if (unlikely(getCheckpointFlag())) {
 
       const AST::InstrView::iterator Iter = PC;
       // std::cout << "[DEBUG] (Iter, Iter->Offset, Iter->OpCode) = (" << Iter << ", " << Iter->getOffset() << ", " << OpCodeStr[Iter->getOpCode()] << ")" << std::endl;
@@ -2307,6 +2313,7 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
         exit(0);
       }
     }
+#endif
 
     PC++;
   }

@@ -27,15 +27,6 @@ static constexpr uint8_t TYPE_S128 = 4;
 namespace WasmEdge {
 namespace Executor {
   using M = Migrator;
-  static bool checkpointFlag = false;
-
-  bool setCheckpointFlag(bool flag) {
-    checkpointFlag = flag;
-    return true;
-  }
-  bool getCheckpointFlag() {
-    return checkpointFlag;
-  }
 
   /// ================
   /// Dump functions

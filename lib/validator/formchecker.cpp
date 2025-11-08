@@ -12,6 +12,9 @@
 #include <tuple>
 #include <wasmig/log.h>
 
+#define WASMIG_ENABLE_METADATA_STACKMAP 1
+#define WASMIG_ENABLE_METADATA_ADDRMAP 1
+
 namespace WasmEdge {
 namespace Validator {
 
@@ -133,11 +136,13 @@ Expect<void> FormChecker::checkExpr(AST::InstrView Instrs) {
 
 Expect<void> FormChecker::checkInstrs(AST::InstrView Instrs) {
   // Validate instructions
+#if WASMIG_ENABLE_METADATA_STACKMAP != 0 || WASMIG_ENABLE_METADATA_ADDRMAP != 0
   auto baseInstr = Instrs.begin();
   uint32_t base_offset = baseInstr->getOffset();
   auto getOffset = [base_offset](uint32_t targetOffset) {
     return targetOffset - base_offset;
   };
+#endif
 
   for (auto &Instr : Instrs) {
     if (auto Res = checkInstr(Instr); !Res) {
@@ -146,6 +151,7 @@ Expect<void> FormChecker::checkInstrs(AST::InstrView Instrs) {
       return Unexpect(Res);
     }
     // Save metadata stack
+#if WASMIG_ENABLE_METADATA_STACKMAP != 0
     if (is_code_validating) {
       if (Instr.getOpCode() == OpCode::Call || Instr.getOpCode() == OpCode::Call_indirect) {
         spdlog::debug("Saving type stack for fidx={}, offset={}\n", Instr.getTargetIndex(), getOffset(Instr.getOffset()+1));
@@ -156,7 +162,9 @@ Expect<void> FormChecker::checkInstrs(AST::InstrView Instrs) {
       wasmig_stack_state_save_pair(metadata_stack_map, getOffset(Instr.getOffset()), 
           metadata_address_stack, metadata_type_stack);
     }
+#endif
     // Construct metadata address map
+#if WASMIG_ENABLE_METADATA_ADDRMAP != 0
     if (is_code_validating) {
       const AST::Instruction* instrPtr = &Instr;
       wasmig_debug("Adding address map for fidx=%d, offset=%d, instr=%p\n", current_fidx, getOffset(Instr.getOffset()), instrPtr);
@@ -170,6 +178,7 @@ Expect<void> FormChecker::checkInstrs(AST::InstrView Instrs) {
       wasmig_address_map_set_backward(metadata_address_map, current_fidx, Offset, Instr.getOffset());
       wasmig_address_map_set_forward(metadata_address_map, current_fidx, Offset, InstrAddr);
     }
+#endif
   }
   return {};
 }
@@ -2342,10 +2351,12 @@ void FormChecker::pushType(VType V) {
   ValStack.emplace_back(V); 
 
   // Push to metadata stack
+#if WASMIG_ENABLE_METADATA_STACKMAP != 0
   if (is_code_validating) {
     metadata_address_stack = wasmig_stack_push(metadata_address_stack, LocalInits.size() + ValStack.size() - 1);
     metadata_type_stack = wasmig_stack_push(metadata_type_stack, wasm_type_width(V));
   }
+#endif
 }
 
 void FormChecker::pushTypes(Span<const VType> Input) {
@@ -2374,10 +2385,12 @@ Expect<VType> FormChecker::popType() {
   ValStack.pop_back();
 
   // Pop from metadata stack
+#if WASMIG_ENABLE_METADATA_STACKMAP != 0
   if (is_code_validating) {
     metadata_address_stack = wasmig_stack_pop(metadata_address_stack, NULL);
     metadata_type_stack = wasmig_stack_pop(metadata_type_stack, NULL);
   }
+#endif
 
   return Res;
 }
