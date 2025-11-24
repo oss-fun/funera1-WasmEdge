@@ -19,6 +19,7 @@
 #include "common/log.h"
 #include "system/allocator.h"
 
+#include <cstdio>
 #include <unistd.h>
 #include <algorithm>
 #include <cstdint>
@@ -28,6 +29,7 @@
 #include <set>
 #include <utility>
 #include <iostream>
+#include <vector>
 
 namespace WasmEdge {
 namespace Runtime {
@@ -378,30 +380,97 @@ public:
         return -1;
     }
 
+    auto PageMapGuard = std::unique_ptr<FILE, decltype(&fclose)>(PageMap, &fclose);
+
+    const auto IsZeroPage = [](const uint8_t *Page, uint32_t Size) noexcept {
+      const uint64_t *Page64 = reinterpret_cast<const uint64_t *>(Page);
+      const uint32_t Count64 = Size / sizeof(uint64_t);
+      for (uint32_t I = 0; I < Count64; ++I) {
+        if (Page64[I] != 0) {
+          return false;
+        }
+      }
+      for (uint32_t I = Count64 * sizeof(uint64_t); I < Size; ++I) {
+        if (Page[I] != 0) {
+          return false;
+        }
+      }
+      return true;
+    };
+
     uint8_t* BegAddr = Data.data();
     uint8_t* EndAddr = BegAddr + Data.size();
     uint64_t PageMapEntry;
+
+    uint32_t ZeroRunStart = 0;
+    uint32_t ZeroRunCount = 0;
+
+    const auto FlushZeroRun = [&](std::ofstream &Stream) -> bool {
+      if (ZeroRunCount == 0) {
+        return true;
+      }
+      constexpr uint8_t ZeroRunType = 2;
+      Stream.write(reinterpret_cast<const char *>(&ZeroRunType), sizeof(uint8_t));
+      Stream.write(reinterpret_cast<const char *>(&ZeroRunStart), sizeof(uint32_t));
+      Stream.write(reinterpret_cast<const char *>(&ZeroRunCount), sizeof(uint32_t));
+      if (!Stream) {
+        return false;
+      }
+      ZeroRunStart = 0;
+      ZeroRunCount = 0;
+      return true;
+    };
+
     for (uint8_t* Addr = BegAddr; Addr < EndAddr; Addr += PAGE_SIZE) {
       uint64_t pfn = (uint64_t)Addr / PAGE_SIZE;
       off64_t Offset = sizeof(uint64_t) * pfn;
 
       if (fseek(PageMap, Offset, SEEK_SET) == -1) {
           perror("[ERROR]Failed seeking to pagemap entry");
-          fclose(PageMap);
           return -1;
       }
 
       if (fread(&PageMapEntry, PAGEMAP_LENGTH, 1, PageMap) == 0) {
           perror("[ERROR]Failed reading pagemap entry");
-          fclose(PageMap);
           return -1;
       }
 
-      if (IsDirtyPage(PageMapEntry)) {
-        uint32_t MemInstAddr = Addr - BegAddr;
-        ofs.write(reinterpret_cast<char *>(&MemInstAddr), sizeof(uint32_t));
-        ofs.write(reinterpret_cast<char *>(Addr), PAGE_SIZE);
+      if (!IsDirtyPage(PageMapEntry)) {
+        if (!FlushZeroRun(ofs)) {
+          return -1;
+        }
+        continue;
       }
+
+      if (IsZeroPage(Addr, PAGE_SIZE)) {
+        if (ZeroRunCount == 0) {
+          ZeroRunStart = static_cast<uint32_t>(Addr - BegAddr);
+        }
+        ++ZeroRunCount;
+        continue;
+      }
+
+      if (!FlushZeroRun(ofs)) {
+        return -1;
+      }
+
+      constexpr uint8_t DirtyType = 1;
+      ofs.write(reinterpret_cast<const char *>(&DirtyType), sizeof(uint8_t));
+      if (!ofs) {
+        return -1;
+      }
+      uint32_t MemInstAddr = Addr - BegAddr;
+      ofs.write(reinterpret_cast<char *>(&MemInstAddr), sizeof(uint32_t));
+      if (!ofs) {
+        return -1;
+      }
+      ofs.write(reinterpret_cast<char *>(Addr), PAGE_SIZE);
+      if (!ofs) {
+        return -1;
+      }
+    }
+    if (!FlushZeroRun(ofs)) {
+      return -1;
     }
     return 0;
   }
@@ -489,16 +558,44 @@ public:
 
     const uint32_t PAGE_SIZE = 4096;
     std::vector<uint8_t> memory(PAGE_SIZE);
-    uint32_t MemInstAddr;
-    while (1) {
-      ifs.read(reinterpret_cast<char *>(&MemInstAddr), sizeof(uint32_t));
-      if (ifs.eof()) break;
-      // std::cerr << "[DEBUG]restore page: " << offset << std::endl;
+    while (true) {
+      uint8_t RecordType = 0;
+      if (!ifs.read(reinterpret_cast<char *>(&RecordType), sizeof(uint8_t))) {
+        if (ifs.eof()) {
+          break;
+        }
+        return Unexpect(ErrCode::Value::IllegalPath);
+      }
 
-      ifs.read(reinterpret_cast<char *>(memory.data()), PAGE_SIZE);
-      if (auto Res = setBytes(Span<Byte>(memory), MemInstAddr, 0, PAGE_SIZE); !Res) {
-        return Unexpect(Res);
-      } 
+      if (RecordType == 1) {
+        uint32_t MemInstAddr = 0;
+        if (!ifs.read(reinterpret_cast<char *>(&MemInstAddr), sizeof(uint32_t))) {
+          return Unexpect(ErrCode::Value::IllegalPath);
+        }
+        if (!ifs.read(reinterpret_cast<char *>(memory.data()), PAGE_SIZE)) {
+          return Unexpect(ErrCode::Value::IllegalPath);
+        }
+        if (auto Res = setBytes(Span<Byte>(memory), MemInstAddr, 0, PAGE_SIZE); !Res) {
+          return Unexpect(Res);
+        }
+      } else if (RecordType == 2) {
+        uint32_t ZeroRunStart = 0;
+        uint32_t ZeroRunCount = 0;
+        if (!ifs.read(reinterpret_cast<char *>(&ZeroRunStart), sizeof(uint32_t))) {
+          return Unexpect(ErrCode::Value::IllegalPath);
+        }
+        if (!ifs.read(reinterpret_cast<char *>(&ZeroRunCount), sizeof(uint32_t))) {
+          return Unexpect(ErrCode::Value::IllegalPath);
+        }
+        for (uint32_t I = 0; I < ZeroRunCount; ++I) {
+          uint32_t PageOffset = ZeroRunStart + I * PAGE_SIZE;
+          if (auto Res = fillBytes(0, PageOffset, PAGE_SIZE); !Res) {
+            return Unexpect(Res);
+          }
+        }
+      } else {
+        return Unexpect(ErrCode::Value::IllegalPath);
+      }
     }
 
     ifs.close();

@@ -1953,23 +1953,23 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
       clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpMemory(StackMgr.getModule());
       clock_gettime(CLOCK_MONOTONIC, &ts2);
-      spdlog::info("memory, %d", getTime(ts1, ts2));
+      spdlog::info("memory, {}", getTime(ts1, ts2));
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpGlobal(StackMgr.getModule());
       clock_gettime(CLOCK_MONOTONIC, &ts2);
-      spdlog::info("global, %d", getTime(ts1, ts2));
+      spdlog::info("global, {}", getTime(ts1, ts2));
 
       // std::cerr << "Success dumpGlobal" << std::endl;
       clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpProgramCounter(StackMgr.getModule(), PC);
       clock_gettime(CLOCK_MONOTONIC, &ts2);
-      spdlog::info("program counter, %d", getTime(ts1, ts2));
+      spdlog::info("program counter, {}", getTime(ts1, ts2));
 
       clock_gettime(CLOCK_MONOTONIC, &ts1);
       Migr.dumpStack(StackMgr, PC);
       clock_gettime(CLOCK_MONOTONIC, &ts2);
-      spdlog::info("stack, %d", getTime(ts1, ts2));
+      spdlog::info("stack, {}", getTime(ts1, ts2));
 
       Migr.dumpSocket();
 
