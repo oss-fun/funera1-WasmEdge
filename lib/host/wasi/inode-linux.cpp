@@ -21,6 +21,12 @@
 
 #include <chrono>
 
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+#include <cstdio>
+#include <cstdlib>
+
 namespace WasmEdge {
 namespace Host {
 namespace WASI {
@@ -923,6 +929,8 @@ WasiExpect<INode> INode::sockOpen(__wasi_address_family_t AddressFamily,
     //spdlog::info("sock_open success {}", NewFd);
     INode New(NewFd);
     //New.IsWasiSocket = true;
+    int on = 1;
+    ::setsockopt(NewFd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
     return New;
   }
 }
@@ -983,6 +991,96 @@ WasiExpect<INode> INode::sockAccept(__wasi_fdflags_t FdFlags) noexcept {
     }
   }
 
+  return New;
+}
+
+WasiExpect<INode> INode::restoreAccept() noexcept {
+  int recv_sock = ::socket(AF_UNIX, SOCK_STREAM, 0);
+  sockaddr_un addr{};
+  addr.sun_family = AF_UNIX;
+  std::strncpy(addr.sun_path, "/tmp/runtime.sock", sizeof(addr.sun_path) - 1);
+  if (connect(recv_sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+    perror("connect");
+    close(recv_sock);
+  }
+  const char* req = "GETFD";
+  if (write(recv_sock, req, strlen(req)) < 0) {
+    perror("write");
+    close(recv_sock);
+  }
+  
+  struct msghdr msg{};
+  char buf[1];
+  struct iovec io{ buf, sizeof(buf) };
+  msg.msg_iov = &io;
+  msg.msg_iovlen = 1;
+  
+  char control[CMSG_SPACE(sizeof(int))];
+  msg.msg_control = control;
+  msg.msg_controllen = sizeof(control);
+
+  if (recvmsg(recv_sock, &msg, 0) < 0) {
+    perror("recvmsg");
+    close(recv_sock);
+  }
+  struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+  if (!cmsg || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_type != SCM_RIGHTS) {
+    fprintf(stderr, "Invalid control message\n");
+    close(recv_sock);
+  }
+
+  int received_fd;
+  std::memcpy(&received_fd, CMSG_DATA(cmsg), sizeof(received_fd));
+
+  close(recv_sock);
+
+  INode New(received_fd);
+  //std::cout << "INode::restoreAccept() return" << std::endl;
+  return New;
+}
+
+WasiExpect<INode> INode::restoreOpen() noexcept {
+  int recv_sock = ::socket(AF_UNIX, SOCK_STREAM, 0);
+  sockaddr_un addr{};
+  addr.sun_family = AF_UNIX;
+  std::strncpy(addr.sun_path, "/tmp/runtime.sock", sizeof(addr.sun_path) - 1);
+  if (connect(recv_sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+    perror("connect");
+    close(recv_sock);
+  }
+  const char* req = "GETFD";
+  if (write(recv_sock, req, strlen(req)) < 0) {
+    perror("write");
+    close(recv_sock);
+  }
+  
+  struct msghdr msg{};
+  char buf[1];
+  struct iovec io{ buf, sizeof(buf) };
+  msg.msg_iov = &io;
+  msg.msg_iovlen = 1;
+  
+  char control[CMSG_SPACE(sizeof(int))];
+  msg.msg_control = control;
+  msg.msg_controllen = sizeof(control);
+
+  if (recvmsg(recv_sock, &msg, 0) < 0) {
+    perror("recvmsg");
+    close(recv_sock);
+  }
+  struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+  if (!cmsg || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_type != SCM_RIGHTS) {
+    fprintf(stderr, "Invalid control message\n");
+    close(recv_sock);
+  }
+
+  int received_fd;
+  std::memcpy(&received_fd, CMSG_DATA(cmsg), sizeof(received_fd));
+
+  close(recv_sock);
+
+  INode New(received_fd);
+  //std::cout << "INode::restoreOpen() return" << std::endl;
   return New;
 }
 

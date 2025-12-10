@@ -8,6 +8,8 @@
 #include "runtime/sockregistry.h"
 #include "executor/executor.h"
 
+#include "host/wasi/wasimodule.h"
+
 #include <map>
 #include <iostream>
 #include <vector>
@@ -371,62 +373,98 @@ public:
   }
 
   void dumpSocket() {
+    /* auto *Store = Runtime::GlobalStoreRegistry::get();
+    if (!Store) {
+      std::cout << "Store is NULL (LinkedStore empty?)\n";
+      return;
+    }
+    auto wasimod = dynamic_cast<const Host::WasiModule*>(Store->findModule("wasi_snapshot_preview1"));
+    auto &env = wasimod->getEnv(); */
+
+/*     std::cout << "Store address: " << Store << "\n";
+    std::cout << "Module count: " << Store->getModuleListSize() << "\n";
+    Store->getModuleList([](const auto &NamedMod) {
+        std::cout << "=== Modules in Store ===\n";
+        for (const auto &pair : NamedMod) {
+            std::cout << "- " << pair.first << " @ " << pair.second << "\n";
+        }
+        return 0;
+    }); */
+    std::ofstream ofs(ImageDir + "socket_fd.img", std::ios::trunc | std::ios::binary);
+
+    auto &registry = WasmEdge::Runtime::SocketRegistry::getInstance();
+    auto entries = registry.getAll();
+
+    int fds_send[2] = {-1, -1};
+    for (const auto &e : entries){
+      //std::cout << "[dump] vfd=" << e.vfd << " fd=" << e.fd << " src=" << e.src << std::endl;
+      ofs.write(reinterpret_cast<const char*>(&e.vfd), sizeof(e.vfd));
+      ofs.write(reinterpret_cast<const char*>(&e.fd), sizeof(e.fd));
+      ofs.write(reinterpret_cast<const char*>(&e.src), sizeof(e.src));
+
+      if (e.src == 1){
+        fds_send[0] = e.fd;
+      } else if (e.src == 2){
+        fds_send[1] = e.fd;
+      }
+    }
+    ofs.close();
+
     int unix_sock = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (unix_sock < 0) {
       std::perror("socket");
       exit(1);
     }
-    sockaddr_un unaddr = {};
+    sockaddr_un unaddr;
+    memset(&unaddr, 0, sizeof(unaddr));
     unaddr.sun_family = AF_UNIX;
     std::strncpy(unaddr.sun_path, "/tmp/fdpass.sock", sizeof(unaddr.sun_path) - 1);
     if (connect(unix_sock, reinterpret_cast<sockaddr*>(&unaddr), sizeof(unaddr)) < 0) {
       std::perror("connect");
       exit(1);
     }
-    try {
-      int fd = WasmEdge::Runtime::SocketRegistry::getInstance().getSocket(); 
+    for (int i = 0; i < 2; i++) {
+        int fd = fds_send[i];
+        if (fd < 0)
+            continue;  // 該当するFDが無ければスキップ
 
-      struct msghdr msg = {};
-      char buf[CMSG_SPACE(sizeof(fd))] = {};
-      const char data = 'F';
-      struct iovec io = {
-        .iov_base = const_cast<char*>(&data),
-        .iov_len = sizeof(data)
-      };
-      msg.msg_iov = &io;
-      msg.msg_iovlen = 1;
-      msg.msg_control = buf;
-      msg.msg_controllen = sizeof(buf);
+        struct msghdr msg = {};
+        struct iovec io;
+        char buf[CMSG_SPACE(sizeof(fd))];
+        char data = 'F';
 
-      struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
-      cmsg->cmsg_level = SOL_SOCKET;
-      cmsg->cmsg_type  = SCM_RIGHTS;
-      cmsg->cmsg_len   = CMSG_LEN(sizeof(fd));
+        memset(buf, 0, sizeof(buf));
 
-      std::memcpy(CMSG_DATA(cmsg), &fd, sizeof(fd));
-      if (sendmsg(unix_sock, &msg, 0) < 0) {
-        throw std::runtime_error("sendmsg() failed: " + std::string(std::strerror(errno)));
-      }
-      std::cout << "FD sent " << fd << std::endl;
-      /*char ack;
-      ssize_t n = ::recv(unix_sock, &ack, 1, 0);
-      if (n < 0) {
-        throw std::runtime_error("recv ACK failed: " + std::string(std::strerror(errno)));
-      }
-      if (ack != 'O') {  // 任意の確認文字
-        throw std::runtime_error("unexpected ACK value");
-      }
-      */
-      /*std::cout << "Press ENTER to start closing" << std::endl;
-      getchar();
-      std::cout << "close fd " << fd << std::endl;
-      ::close(fd);
-      sleep(5);
-      */
-    } catch (const std::exception& e) {
-      std::cerr << e.what() << std::endl;
+        io.iov_base = &data;
+        io.iov_len = sizeof(data);
+        msg.msg_iov = &io;
+        msg.msg_iovlen = 1;
+        msg.msg_control = buf;
+        msg.msg_controllen = sizeof(buf);
+
+        struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+        cmsg->cmsg_level = SOL_SOCKET;
+        cmsg->cmsg_type = SCM_RIGHTS;
+        cmsg->cmsg_len = CMSG_LEN(sizeof(fd));
+        memcpy(CMSG_DATA(cmsg), &fd, sizeof(fd));
+
+        if (sendmsg(unix_sock, &msg, 0) < 0) {
+            std::fprintf(stderr, "sendmsg() failed: %s\n", strerror(errno));
+            close(unix_sock);
+            exit(1);
+        }
+        
+
+        //std::printf("FD sent %d (src=%d)\n", fd, (i == 0 ? 1 : 2));
     }
-    ::close(unix_sock);
+    struct msghdr msg = {};
+    char cmd = 'E';
+    struct iovec io = { .iov_base = &cmd, .iov_len = 1 };
+    msg.msg_iov = &io;
+    msg.msg_iovlen = 1;
+    sendmsg(unix_sock, &msg, 0);
+    
+    ::close(unix_sock); 
     return;
 
     //std::cout << "touched Vsocket: " << WasmEdge::Runtime::SocketRegistry::getInstance().getVSocket() << std::endl;

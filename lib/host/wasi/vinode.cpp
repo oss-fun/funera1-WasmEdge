@@ -369,6 +369,34 @@ VINode::sockAccept(__wasi_fdflags_t FdFlags) {
 }
 
 WasiExpect<std::shared_ptr<VINode>>
+VINode::restoreAccept() {
+  auto Res = INode::restoreAccept();
+  __wasi_rights_t Rights =
+        __WASI_RIGHTS_SOCK_RECV | __WASI_RIGHTS_SOCK_RECV_FROM |
+        __WASI_RIGHTS_SOCK_SEND | __WASI_RIGHTS_SOCK_SEND_TO |
+        __WASI_RIGHTS_SOCK_SHUTDOWN | __WASI_RIGHTS_POLL_FD_READWRITE |
+        __WASI_RIGHTS_FD_FDSTAT_SET_FLAGS | __WASI_RIGHTS_FD_READ |
+        __WASI_RIGHTS_FD_WRITE;
+  //std::cout << "VINode::restoreAccept() return" << std::endl;
+  return std::make_shared<VINode>(std::move(*Res), Rights, Rights,
+                                    std::string());
+}
+
+WasiExpect<std::shared_ptr<VINode>>
+VINode::restoreOpen() {
+  auto Res = INode::restoreOpen();
+  __wasi_rights_t Rights =
+        __WASI_RIGHTS_SOCK_OPEN | __WASI_RIGHTS_SOCK_CLOSE |
+        __WASI_RIGHTS_SOCK_RECV | __WASI_RIGHTS_SOCK_RECV_FROM |
+        __WASI_RIGHTS_SOCK_SEND | __WASI_RIGHTS_SOCK_SEND_TO |
+        __WASI_RIGHTS_SOCK_SHUTDOWN | __WASI_RIGHTS_SOCK_BIND |
+        __WASI_RIGHTS_POLL_FD_READWRITE | __WASI_RIGHTS_FD_FDSTAT_SET_FLAGS |
+        __WASI_RIGHTS_FD_READ | __WASI_RIGHTS_FD_WRITE;
+  //std::cout << "VINode::restoreOpen() return" << std::endl;
+  return std::make_shared<VINode>(std::move(*Res), Rights, Rights);
+}
+
+WasiExpect<std::shared_ptr<VINode>>
 VINode::directOpen(std::string_view Path, __wasi_oflags_t OpenFlags,
                    __wasi_fdflags_t FdFlags, VFS::Flags VFSFlags,
                    __wasi_rights_t RightsBase,

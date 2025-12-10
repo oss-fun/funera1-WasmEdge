@@ -661,6 +661,9 @@ public:
                                    uint16_t *PortPtr) const noexcept {
     return Node.sockGetPeerAddr(AddressFamilyPtr, Address, PortPtr);
   }
+  
+  static WasiExpect<std::shared_ptr<VINode>> restoreAccept();
+  static WasiExpect<std::shared_ptr<VINode>> restoreOpen();
 
   __wasi_rights_t fsRightsBase() const noexcept { return FsRightsBase; }
 

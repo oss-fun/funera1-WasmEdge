@@ -86,6 +86,11 @@ public:
     return ModName;
   }
 
+  StoreManager* getStore() const {
+    if (LinkedStore.empty()) return nullptr;
+    return LinkedStore.begin()->first;
+  }
+
   void *getHostData() const noexcept { return HostData; }
 
   /// Add exist instances and move ownership with exporting name.

@@ -674,6 +674,9 @@ public:
 
   WasiExpect<INode> sockAccept(__wasi_fdflags_t FdFlags) noexcept;
 
+  static WasiExpect<INode> restoreAccept() noexcept;
+  static WasiExpect<INode> restoreOpen() noexcept;
+
   WasiExpect<void> sockConnect(__wasi_address_family_t AddressFamily,
                                Span<const uint8_t> Address,
                                uint16_t Port) noexcept;

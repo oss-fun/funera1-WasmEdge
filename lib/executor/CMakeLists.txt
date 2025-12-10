@@ -27,3 +27,8 @@ target_link_libraries(wasmedgeExecutor
   wasmedgeCommon
   wasmedgeSystem
 )
+
+target_include_directories(wasmedgeExecutor
+  PUBLIC
+    ${PROJECT_SOURCE_DIR}/thirdparty
+)

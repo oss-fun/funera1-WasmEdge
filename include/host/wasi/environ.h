@@ -925,14 +925,12 @@ public:
     } else {
       Node = std::move(*Res);
     }
-    auto Vfd = generateRandomFdToNode(Node);
-    /*if (!Vfd.has_value()){
+    auto Vfd = reservedFdToNode(Node);
+    if (!Vfd.has_value()){
       return Vfd;
     }
-    WasmEdge::Runtime::SocketRegistry::getInstance().setVSocket(Vfd.value());
-    WasmEdge::Runtime::SocketRegistry::getInstance().setSocket(Node->getFd());
-    spdlog::info("Env.sockOpen cached vfd={} fd={}", Vfd.value(), Node->getFd());
-    */
+    WasmEdge::Runtime::SocketRegistry::getInstance().addSocket(Vfd.value(), Node->getFd(), 1);
+    //spdlog::info("Env.sockOpen cached vfd={} fd={} src={}\n", Vfd.value(), Node->getFd(), 1);
     return Vfd;
   }
 
@@ -968,15 +966,155 @@ public:
       NewNode = std::move(*Res);
     }
 
-    auto Vfd = generateRandomFdToNode(NewNode);
+    //auto Vfd = generateRandomFdToNode(NewNode);
+    auto Vfd = reservedFdToNode(NewNode);
     if (!Vfd.has_value()){
       return Vfd;
     }
-    WasmEdge::Runtime::SocketRegistry::getInstance().setVSocket(Vfd.value());
-    WasmEdge::Runtime::SocketRegistry::getInstance().setSocket(NewNode->getFd());
-    spdlog::info("Env.sockAccept cached vfd={} fd={}", Vfd.value(), NewNode->getFd());
+    WasmEdge::Runtime::SocketRegistry::getInstance().addSocket(Vfd.value(), NewNode->getFd(), 2);
+    //spdlog::info("Env.sockAccept cached vfd={} fd={} src={}\n", Vfd.value(), NewNode->getFd(), 2);
     return Vfd;
   }
+
+WasiExpect<__wasi_fd_t> restoreAccept(std::string filename) {
+    struct FdEntry {
+      int wasi_fd;
+      int real_fd;
+      int src;
+    };
+
+    std::shared_ptr<VINode> Node;
+    if (auto Res = VINode::restoreAccept(); unlikely(!Res)) {
+      return WasiUnexpect(Res);
+    } else {
+      Node = std::move(*Res);
+    }
+
+    int vfd = -1;
+    if (!filename.empty() && filename.back() != '/') {
+      filename += '/';
+    }
+    filename += "socket_fd.img";
+
+    FILE *fp = std::fopen(filename.c_str(), "rb");
+    if (!fp) {
+        spdlog::error("restoreAccept: fopen failed: {}", filename);
+        return WasiUnexpect(__WASI_ERRNO_IO);
+    }
+
+    FdEntry entry;
+    while (true) {
+      size_t r1 = std::fread(&entry.wasi_fd, sizeof(entry.wasi_fd), 1, fp);
+      size_t r2 = std::fread(&entry.real_fd, sizeof(entry.real_fd), 1, fp);
+      size_t r3 = std::fread(&entry.src, sizeof(entry.src), 1, fp);
+      spdlog::debug("restoreAccept: fread results: r1={} r2={} r3={} entry(wasi={}, real={}, src={})",
+                    r1, r2, r3, entry.wasi_fd, entry.real_fd, entry.src);
+      if (r1 != 1 || r2 != 1 || r3 != 1) {
+        if (feof(fp)) spdlog::debug("restoreAccept: reached EOF");
+        else spdlog::error("restoreAccept: fread error");
+        break;
+      }
+      if (entry.src == 2) {
+        vfd = entry.wasi_fd;
+        //spdlog::info("restoreAccept: found src=2 entry: wasi_fd={} real_fd={}", entry.wasi_fd, entry.real_fd);
+        break;
+      }
+    }
+
+    std::fclose(fp);
+
+    if (vfd < 0) {
+      spdlog::warn("restoreAccept: no src=2 entry found in {}", filename);
+      return WasiUnexpect(__WASI_ERRNO_INVAL);
+    }
+
+    auto Vfd = insertFdToNode(vfd, Node);
+    if (!Vfd.has_value()){
+      spdlog::error("restoreAccept: insertFdToNode failed for vfd={}", vfd);
+      return Vfd;
+    }
+
+    int real_fd = Node->getFd();
+    if (real_fd < 0) {
+      spdlog::error("restoreAccept: Node->getFd() invalid after insert (vfd={})", Vfd.value());
+      return WasiUnexpect(__WASI_ERRNO_BADF);
+    }
+
+    WasmEdge::Runtime::SocketRegistry::getInstance().addSocket(Vfd.value(), real_fd, 2);
+    //spdlog::info("Env.restoreAccept cached vfd={} fd={} src={}", Vfd.value(), real_fd, 2);
+    return Vfd;
+}
+
+  WasiExpect<__wasi_fd_t> restoreOpen(std::string filename) {
+    struct FdEntry {
+      int wasi_fd;
+      int real_fd;
+      int src;
+    };
+
+    std::shared_ptr<VINode> Node;
+    if (auto Res = VINode::restoreOpen(); unlikely(!Res)) {
+      return WasiUnexpect(Res);
+    } else {
+      Node = std::move(*Res);
+    }
+
+    int vfd = -1;
+    if (!filename.empty() && filename.back() != '/') {
+      filename += '/';
+    }
+    filename += "socket_fd.img";
+
+    FILE *fp = std::fopen(filename.c_str(), "rb");
+    if (!fp) {
+        spdlog::error("restoreOpen: fopen failed: {}", filename);
+        return WasiUnexpect(__WASI_ERRNO_IO);
+    }
+
+    FdEntry entry;
+    while (true) {
+      size_t r1 = std::fread(&entry.wasi_fd, sizeof(entry.wasi_fd), 1, fp);
+      size_t r2 = std::fread(&entry.real_fd, sizeof(entry.real_fd), 1, fp);
+      size_t r3 = std::fread(&entry.src, sizeof(entry.src), 1, fp);
+      spdlog::debug("restoreOpen: fread results: r1={} r2={} r3={} entry(wasi={}, real={}, src={})",
+                    r1, r2, r3, entry.wasi_fd, entry.real_fd, entry.src);
+      if (r1 != 1 || r2 != 1 || r3 != 1) {
+        // EOF or read error
+        if (feof(fp)) spdlog::debug("restoreOpen: reached EOF");
+        else spdlog::error("restoreOpen: fread error");
+        break;
+      }
+      if (entry.src == 1) {
+        vfd = entry.wasi_fd;
+        //spdlog::info("restoreOpen: found src=1 entry: wasi_fd={} real_fd={}", entry.wasi_fd, entry.real_fd);
+        break; 
+      }
+    }
+
+    std::fclose(fp);
+
+    if (vfd < 0) {
+      spdlog::warn("restoreOpen: no src=1 entry found in {}", filename);
+      return WasiUnexpect(__WASI_ERRNO_INVAL);
+    }
+
+    auto Vfd = insertFdToNode(vfd, Node);
+    if (!Vfd.has_value()){
+      spdlog::error("restoreOpen: insertFdToNode failed for vfd={}", vfd);
+      return Vfd;
+    }
+
+    int real_fd = Node->getFd();
+    if (real_fd < 0) {
+      spdlog::error("restoreOpen: Node->getFd() invalid after insert (vfd={})", Vfd.value());
+      return WasiUnexpect(__WASI_ERRNO_BADF);
+    }
+
+    WasmEdge::Runtime::SocketRegistry::getInstance().addSocket(Vfd.value(), real_fd, 1);
+    //spdlog::info("Env.restoreOpen cached vfd={} fd={} src={}", Vfd.value(), real_fd, 1);
+    return Vfd;
+}
+
 
   WasiExpect<void> sockConnect(__wasi_fd_t Fd,
                                __wasi_address_family_t AddressFamily,
@@ -1201,7 +1339,7 @@ private:
   WasiExpect<__wasi_fd_t> generateRandomFdToNode(std::shared_ptr<VINode> Node) {
     std::random_device Device;
     std::default_random_engine Engine(Device());
-    std::uniform_int_distribution<__wasi_fd_t> Distribution(0, 0x7FFFFFFF);
+    std::uniform_int_distribution<__wasi_fd_t> Distribution(100, 0x7FFFFFFF);
     bool Success = false;
     __wasi_fd_t NewFd;
     while (!Success) {
@@ -1211,6 +1349,27 @@ private:
     }
     return NewFd;
   }
+
+  WasiExpect<__wasi_fd_t> reservedFdToNode(std::shared_ptr<VINode> Node) {
+    std::random_device Device;
+    std::default_random_engine Engine(Device());
+    std::uniform_int_distribution<__wasi_fd_t> Distribution(32, 64);
+    bool Success = false;
+    __wasi_fd_t NewFd;
+    while (!Success) {
+      NewFd = Distribution(Engine);
+      std::unique_lock Lock(FdMutex);
+      Success = FdMap.emplace(NewFd, Node).second;
+    }
+    return NewFd;
+  }
+
+  WasiExpect<__wasi_fd_t> insertFdToNode(__wasi_fd_t ReservedFd, std::shared_ptr<VINode> Node) {
+    std::unique_lock Lock(FdMutex);
+    FdMap.emplace(ReservedFd, Node);
+    return ReservedFd;
+  }
+
 };
 
 class EVPoller : protected VPoller {

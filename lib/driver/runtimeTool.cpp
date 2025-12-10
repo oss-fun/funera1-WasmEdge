@@ -86,13 +86,20 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
   if (Opt.DumpFlag.value()) {
     Conf.getStatisticsConfigure().setDumpFlag(true);
   }
-  if (Opt.RestoreFlag.value()) {
-    Conf.getStatisticsConfigure().setRestoreFlag(true);
+  bool EnvFlag = false;
+
+  const char* value = std::getenv("RUNWASI_RESTORE");
+  if (value && std::strcmp(value, "1") == 0){
+    EnvFlag = true;
   }
-  if (Opt.RestoreSocketFlag.value()){
+  if (Opt.RestoreFlag.value() || EnvFlag) {
     Conf.getStatisticsConfigure().setRestoreFlag(true);
     Conf.getStatisticsConfigure().setRestoreSocketFlag(true);
   }
+  /*if (Opt.RestoreSocketFlag.value()){
+    Conf.getStatisticsConfigure().setRestoreFlag(true);
+    Conf.getStatisticsConfigure().setRestoreSocketFlag(true);
+  }*/
   if (Opt.DebugMode.value()) {
     Conf.getStatisticsConfigure().setDebugMode(true);
   }
@@ -174,8 +181,13 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
           .u8string(),
       Opt.Args.value(), Opt.Env.value());
 
-  auto sockrestore = Opt.RestoreSocketFlag;
-  std::cout << "sockrestore = " << sockrestore.value() << std::endl;
+  auto sockrestore = Conf.getStatisticsConfigure().getRestoreSocketFlag();
+  std::cout << "sockrestore = " << sockrestore << std::endl;
+  if (sockrestore){
+    WasiMod->getEnv().restoreOpen(Conf.getStatisticsConfigure().getImageDir());
+    WasiMod->getEnv().restoreAccept(Conf.getStatisticsConfigure().getImageDir());
+  }
+
 
   if (EnterCommandMode) {
     // command mode

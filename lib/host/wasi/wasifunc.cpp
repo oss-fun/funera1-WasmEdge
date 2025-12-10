@@ -3119,7 +3119,7 @@ Expect<uint32_t> WasiSockBindCompatShim::body(const Runtime::CallingFrame &Frame
   //ポートを取り出す
   uint16_t port = InnerAddress->u.port;
 
-  uint32_t addr_ptr_for_v1 = AddressPtr + 4; //kind部分を無視する4byteオフセット
+  uint32_t addr_ptr_for_v1 = AddressPtr + sizeof(InnerAddress->kind); //kind部分を無視するオフセット
 
   uint8_t *dst = MemInst->getPointer<uint8_t *>(addr_ptr_for_v1); //dst = addr先頭
   if (!dst) {

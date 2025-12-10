@@ -27,6 +27,15 @@ class Executor;
 
 namespace Runtime {
 
+class GlobalStoreRegistry {
+public:
+  static void set(StoreManager* S) { store = S; }
+  static StoreManager* get() { return store; }
+
+private:
+  static inline StoreManager* store = nullptr;
+};
+
 class StoreManager {
 public:
   StoreManager() = default;

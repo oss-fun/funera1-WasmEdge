@@ -38,6 +38,7 @@ VM::VM(const Configure &Conf)
       LoaderEngine(Conf, &Executor::Executor::Intrinsics),
       ValidatorEngine(Conf), ExecutorEngine(Conf, &Stat),
       Store(std::make_unique<Runtime::StoreManager>()), StoreRef(*Store.get()) {
+  Runtime::GlobalStoreRegistry::set(&StoreRef);
   unsafeInitVM();
 }
 
