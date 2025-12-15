@@ -699,15 +699,18 @@ public:
            (Inheriting & RequiredInheritingRights) == RequiredInheritingRights;
   }
 
-  int getFd() noexcept {
-    return Node.getFd();
-  }
+  int getFd() noexcept { return Node.getFd(); }
+  
+  void setOp(int value) { op = value; }
+
+  int getOp() { return op; }
 
 private:
   INode Node;
   __wasi_rights_t FsRightsBase;
   __wasi_rights_t FsRightsInheriting;
   std::string Name;
+  int op = 0;
 
   friend class VPoller;
 

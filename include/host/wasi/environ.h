@@ -747,7 +747,7 @@ public:
     } else {
       Node = std::move(*Res);
     }
-
+    Node->setOp(4);
     return generateRandomFdToNode(Node);
   }
 
@@ -925,13 +925,15 @@ public:
     } else {
       Node = std::move(*Res);
     }
-    auto Vfd = reservedFdToNode(Node);
+    Node->setOp(1);
+    return reservedFdToNode(Node);
+    /* auto Vfd = reservedFdToNode(Node);
     if (!Vfd.has_value()){
       return Vfd;
     }
     WasmEdge::Runtime::SocketRegistry::getInstance().addSocket(Vfd.value(), Node->getFd(), 1);
     //spdlog::info("Env.sockOpen cached vfd={} fd={} src={}\n", Vfd.value(), Node->getFd(), 1);
-    return Vfd;
+    return Vfd; */
   }
 
   WasiExpect<void> sockBind(__wasi_fd_t Fd,
@@ -965,15 +967,16 @@ public:
     } else {
       NewNode = std::move(*Res);
     }
-
+    NewNode->setOp(2);
+    return reservedFdToNode(NewNode);
     //auto Vfd = generateRandomFdToNode(NewNode);
-    auto Vfd = reservedFdToNode(NewNode);
+    /* auto Vfd = reservedFdToNode(NewNode);
     if (!Vfd.has_value()){
       return Vfd;
     }
     WasmEdge::Runtime::SocketRegistry::getInstance().addSocket(Vfd.value(), NewNode->getFd(), 2);
     //spdlog::info("Env.sockAccept cached vfd={} fd={} src={}\n", Vfd.value(), NewNode->getFd(), 2);
-    return Vfd;
+    return Vfd; */
   }
 
 WasiExpect<__wasi_fd_t> restoreAccept(std::string filename) {
@@ -1314,6 +1317,11 @@ WasiExpect<__wasi_fd_t> restoreAccept(std::string filename) {
     std::copy(ValuesSpan.begin(), ValuesSpan.end(),
               cxx20::as_writable_bytes(cxx20::span(Buffer)).begin());
     return std::string(Buffer.data(), Buffer.size());
+  }
+
+  std::unordered_map<__wasi_fd_t, std::shared_ptr<VINode>> getFdMap() const {
+    std::shared_lock Lock(FdMutex);
+    return FdMap;
   }
 
 private:
