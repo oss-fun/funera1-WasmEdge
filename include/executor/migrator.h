@@ -431,24 +431,26 @@ public:
       }
       // VINodeから実FDを取る
       int fd = pair.second->getFd();
+      uint64_t id = generateId();
 
       // === チェックポイントファイル作成部分 === //
       ofs.write(reinterpret_cast<const char*>(&pair.first), sizeof(pair.first));
-      ofs.write(reinterpret_cast<const char*>(&fd), sizeof(fd));
+      ofs.write(reinterpret_cast<const char*>(&id), sizeof(id));
       ofs.write(reinterpret_cast<const char*>(&op), sizeof(op));
 
       // === FD送信部分 === //
 
       // 送信用ペイロード作成
-      Payload data = {.cmd = 'S', .id = generateId()};
+      Payload data = {.cmd = 'S', .id = id};
       std::cout << "id: " << data.id << " Vfd:" << pair.first << " => op:" << op << " Rfd:" << fd << "\n";
-      char buf[CMSG_SPACE(sizeof(fd))];
-      memset(buf, 0, sizeof(buf));
+
       // iovecにペイロードを詰める
       struct iovec io{};
       io.iov_base = &data;
       io.iov_len = sizeof(data);
       // メッセージのiovecはペイロード、コントロール部分にFDを詰める
+      char buf[CMSG_SPACE(sizeof(fd))];
+      memset(buf, 0, sizeof(buf));
       struct msghdr msg{};
       msg.msg_iov = &io;
       msg.msg_iovlen = 1;
@@ -467,15 +469,19 @@ public:
         exit(1);
       }
     }
-    /*
+    // 送信終了制御
     Payload end = {.cmd = 'E', .id = 0};
-    struct iovec io = {.iov_base = &end, .iov_len = sizeof(end)};
-    struct msghdr msg = {.msg_iov = &io, .msg_iovlen = 1};
+    struct iovec io{};
+    io.iov_base = &end; 
+    io.iov_len = sizeof(end);
+    struct msghdr msg{};
+    msg.msg_iov = &io;
+    msg.msg_iovlen = 1;
     if (sendmsg(unix_sock, &msg, 0) < 0) {
       std::fprintf(stderr, "endcmd sendmsg() failed: %s\n", strerror(errno));
       ::close(unix_sock);
       exit(1);
-    }*/
+    }
     ofs.close();
     ::close(unix_sock);
     return;
