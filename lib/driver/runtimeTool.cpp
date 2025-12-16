@@ -184,9 +184,10 @@ int Tool(struct DriverToolOptions &Opt) noexcept {
   auto sockrestore = Conf.getStatisticsConfigure().getRestoreSocketFlag();
   std::cout << "sockrestore = " << sockrestore << std::endl;
   if (sockrestore){
-    WasiMod->getEnv().restoreOpen(Conf.getStatisticsConfigure().getImageDir());
-    WasiMod->getEnv().restoreAccept(Conf.getStatisticsConfigure().getImageDir());
-  }
+    //WasiMod->getEnv().restoreOpen(Conf.getStatisticsConfigure().getImageDir());
+    //WasiMod->getEnv().restoreAccept(Conf.getStatisticsConfigure().getImageDir());
+    WasiMod->getEnv().restoreFdMap(Conf.getStatisticsConfigure().getImageDir());
+  } 
 
 
   if (EnterCommandMode) {

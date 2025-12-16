@@ -662,8 +662,8 @@ public:
     return Node.sockGetPeerAddr(AddressFamilyPtr, Address, PortPtr);
   }
   
-  static WasiExpect<std::shared_ptr<VINode>> restoreAccept();
-  static WasiExpect<std::shared_ptr<VINode>> restoreOpen();
+  static WasiExpect<std::shared_ptr<VINode>> restoreAccept(uint64_t, int);
+  static WasiExpect<std::shared_ptr<VINode>> restoreOpen(uint64_t, int);
 
   __wasi_rights_t fsRightsBase() const noexcept { return FsRightsBase; }
 
@@ -698,11 +698,14 @@ public:
     return (Base & RequiredRights) == RequiredRights &&
            (Inheriting & RequiredInheritingRights) == RequiredInheritingRights;
   }
+  // 作成操作によってVINodeの持つ権限が変わるので
+  // リストア時に復元するため覚えておく
+  // sock_open   = 1
+  // sock_accept = 2
+  // fd_readdir  = 
+  // path_open   =
 
-  int getFd() noexcept { return Node.getFd(); }
-  
   void setOp(int value) { op = value; }
-
   int getOp() { return op; }
 
 private:

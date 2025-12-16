@@ -369,22 +369,10 @@ VINode::sockAccept(__wasi_fdflags_t FdFlags) {
 }
 
 WasiExpect<std::shared_ptr<VINode>>
-VINode::restoreAccept() {
-  auto Res = INode::restoreAccept();
-  __wasi_rights_t Rights =
-        __WASI_RIGHTS_SOCK_RECV | __WASI_RIGHTS_SOCK_RECV_FROM |
-        __WASI_RIGHTS_SOCK_SEND | __WASI_RIGHTS_SOCK_SEND_TO |
-        __WASI_RIGHTS_SOCK_SHUTDOWN | __WASI_RIGHTS_POLL_FD_READWRITE |
-        __WASI_RIGHTS_FD_FDSTAT_SET_FLAGS | __WASI_RIGHTS_FD_READ |
-        __WASI_RIGHTS_FD_WRITE;
-  //std::cout << "VINode::restoreAccept() return" << std::endl;
-  return std::make_shared<VINode>(std::move(*Res), Rights, Rights,
-                                    std::string());
-}
-
-WasiExpect<std::shared_ptr<VINode>>
-VINode::restoreOpen() {
-  auto Res = INode::restoreOpen();
+VINode::restoreOpen(uint64_t id, int unix_sock) {
+  // ブローカーにFDを要求しINodeに整形
+  auto Res = INode::receiveFd(id, unix_sock);
+  // sock_openの時に設定する権限を同様に設定
   __wasi_rights_t Rights =
         __WASI_RIGHTS_SOCK_OPEN | __WASI_RIGHTS_SOCK_CLOSE |
         __WASI_RIGHTS_SOCK_RECV | __WASI_RIGHTS_SOCK_RECV_FROM |
@@ -392,8 +380,22 @@ VINode::restoreOpen() {
         __WASI_RIGHTS_SOCK_SHUTDOWN | __WASI_RIGHTS_SOCK_BIND |
         __WASI_RIGHTS_POLL_FD_READWRITE | __WASI_RIGHTS_FD_FDSTAT_SET_FLAGS |
         __WASI_RIGHTS_FD_READ | __WASI_RIGHTS_FD_WRITE;
-  //std::cout << "VINode::restoreOpen() return" << std::endl;
+  // 整形したVINodeを返す
   return std::make_shared<VINode>(std::move(*Res), Rights, Rights);
+}
+
+WasiExpect<std::shared_ptr<VINode>>
+VINode::restoreAccept(uint64_t id, int unix_sock) {
+  auto Res = INode::receiveFd(id, unix_sock);
+  // sock_acceptの時に設定する権限を同様に設定
+  __wasi_rights_t Rights =
+        __WASI_RIGHTS_SOCK_RECV | __WASI_RIGHTS_SOCK_RECV_FROM |
+        __WASI_RIGHTS_SOCK_SEND | __WASI_RIGHTS_SOCK_SEND_TO |
+        __WASI_RIGHTS_SOCK_SHUTDOWN | __WASI_RIGHTS_POLL_FD_READWRITE |
+        __WASI_RIGHTS_FD_FDSTAT_SET_FLAGS | __WASI_RIGHTS_FD_READ |
+        __WASI_RIGHTS_FD_WRITE;
+  return std::make_shared<VINode>(std::move(*Res), Rights, Rights,
+                                    std::string());
 }
 
 WasiExpect<std::shared_ptr<VINode>>

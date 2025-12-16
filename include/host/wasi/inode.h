@@ -75,7 +75,6 @@ struct FdHolder {
     reset();
     Fd = NewFd;
   }
-  int getFd() noexcept { return Fd; }
   int Fd = -1;
   bool Cleanup = true;
   bool IsWasiSocket = false;
@@ -674,8 +673,9 @@ public:
 
   WasiExpect<INode> sockAccept(__wasi_fdflags_t FdFlags) noexcept;
 
-  static WasiExpect<INode> restoreAccept() noexcept;
-  static WasiExpect<INode> restoreOpen() noexcept;
+  static WasiExpect<INode> receiveFd(uint64_t, int) noexcept;
+  //static WasiExpect<INode> restoreAccept(uint64_t) noexcept;
+  //static WasiExpect<INode> restoreOpen(uint64_t) noexcept;
 
   WasiExpect<void> sockConnect(__wasi_address_family_t AddressFamily,
                                Span<const uint8_t> Address,

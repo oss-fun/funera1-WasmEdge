@@ -374,18 +374,64 @@ public:
     }
   }
 
-  //pid＋カウントで一意IDを生成する
+  // pid＋カウントで一意IDを生成する
   uint64_t generateId() {
     static uint64_t counter = 0;
     uint64_t c = __atomic_fetch_add(&counter, 1, __ATOMIC_RELAXED);
     return ((uint64_t)getpid() << 32) | c;
   }
-  //制御コマンドと一意IDを持つペイロード
+  // 制御コマンドと一意IDを持つペイロード
   struct Payload {
-    // cmd 送信：'S', 受信：'R'
+    // cmd 送信：'S', 要求：'R', 終了：'E'
     char cmd;
     uint64_t id;
   };
+  // msg_controlに入れるバッファ
+  struct FdCmsgBuf {
+    alignas(struct cmsghdr)
+    char buf[CMSG_SPACE(sizeof(int))];
+  };
+
+  // FD要求、終了制御のためのmsg作成
+  static void setUpMsg(
+    msghdr *msg,
+    iovec *io,
+    Payload &p
+  ) {
+    // iovecにペイロードを詰める
+    io->iov_base = &p;
+    io->iov_len = sizeof(p);
+    // msgにペイロードを詰めたiovecを渡す
+    msg->msg_iov = io;
+    msg->msg_iovlen = 1;
+    return;
+  }
+
+  // FDを渡すときのcmsg作成
+  static bool setUpCmsg(
+    msghdr *msg,
+    iovec *io,
+    Payload &p,
+    int fd,
+    FdCmsgBuf &cbuf
+  ) {
+    // iovecまで詰めたmsgを作る
+    setUpMsg(msg, io, p);
+    // msgのcontrol部分に補助データを詰める
+    memset(&cbuf, 0, sizeof(cbuf));
+    msg->msg_control = cbuf.buf;
+    msg->msg_controllen = sizeof(cbuf.buf);
+    // FD送信用のcmsgを作成
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(msg);
+    if (!cmsg) {
+      return false;
+    }
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type = SCM_RIGHTS;
+    cmsg->cmsg_len = CMSG_LEN(sizeof(fd));
+    memcpy(CMSG_DATA(cmsg), &fd, sizeof(fd));
+    return true;
+  }
 
   void dumpSocket() {
     // ストアマネージャのポインタ取得
@@ -430,7 +476,9 @@ public:
         continue;
       }
       // VINodeから実FDを取る
-      int fd = pair.second->getFd();
+      //int fd = pair.second->getFd();
+      int fd = pair.second->getNativeHandler().value();
+      // 一意なidを作成
       uint64_t id = generateId();
 
       // === チェックポイントファイル作成部分 === //
@@ -443,25 +491,16 @@ public:
       // 送信用ペイロード作成
       Payload data = {.cmd = 'S', .id = id};
       std::cout << "id: " << data.id << " Vfd:" << pair.first << " => op:" << op << " Rfd:" << fd << "\n";
-
-      // iovecにペイロードを詰める
+      
       struct iovec io{};
-      io.iov_base = &data;
-      io.iov_len = sizeof(data);
-      // メッセージのiovecはペイロード、コントロール部分にFDを詰める
-      char buf[CMSG_SPACE(sizeof(fd))];
-      memset(buf, 0, sizeof(buf));
       struct msghdr msg{};
-      msg.msg_iov = &io;
-      msg.msg_iovlen = 1;
-      msg.msg_control = buf;
-      msg.msg_controllen = sizeof(buf);
-      // メッセージをもとにFDを渡すcmsgを作成
-      struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-      cmsg->cmsg_level = SOL_SOCKET;
-      cmsg->cmsg_type = SCM_RIGHTS;
-      cmsg->cmsg_len = CMSG_LEN(sizeof(fd));
-      memcpy(CMSG_DATA(cmsg), &fd, sizeof(fd));
+      FdCmsgBuf cbuf;
+      if (!setUpCmsg(&msg, &io, data, fd, cbuf)) {
+        spdlog::error("setup cmsg failed");
+        ::close(unix_sock);
+        exit(1);
+      }
+
       //　sendmsgで送信
       if (sendmsg(unix_sock, &msg, 0) < 0) {
         std::fprintf(stderr, "fd%d sendmsg() failed: %s\n", fd, strerror(errno));
@@ -470,14 +509,12 @@ public:
       }
     }
     // 送信終了制御
-    Payload end = {.cmd = 'E', .id = 0};
-    struct iovec io{};
-    io.iov_base = &end; 
-    io.iov_len = sizeof(end);
-    struct msghdr msg{};
-    msg.msg_iov = &io;
-    msg.msg_iovlen = 1;
-    if (sendmsg(unix_sock, &msg, 0) < 0) {
+    Payload e_data = {.cmd = 'E', .id = 0};
+    struct iovec e_io{};
+    struct msghdr e_msg{};
+    setUpMsg(&e_msg, &e_io, e_data);
+
+    if (sendmsg(unix_sock, &e_msg, 0) < 0) {
       std::fprintf(stderr, "endcmd sendmsg() failed: %s\n", strerror(errno));
       ::close(unix_sock);
       exit(1);

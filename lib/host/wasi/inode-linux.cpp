@@ -994,93 +994,66 @@ WasiExpect<INode> INode::sockAccept(__wasi_fdflags_t FdFlags) noexcept {
   return New;
 }
 
-WasiExpect<INode> INode::restoreAccept() noexcept {
-  int recv_sock = ::socket(AF_UNIX, SOCK_STREAM, 0);
-  sockaddr_un addr{};
-  addr.sun_family = AF_UNIX;
-  std::strncpy(addr.sun_path, "/tmp/runtime.sock", sizeof(addr.sun_path) - 1);
-  if (connect(recv_sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
-    perror("connect");
-    close(recv_sock);
-  }
-  const char* req = "GETFD";
-  if (write(recv_sock, req, strlen(req)) < 0) {
-    perror("write");
-    close(recv_sock);
-  }
-  
-  struct msghdr msg{};
-  char buf[1];
-  struct iovec io{ buf, sizeof(buf) };
-  msg.msg_iov = &io;
-  msg.msg_iovlen = 1;
-  
-  char control[CMSG_SPACE(sizeof(int))];
-  msg.msg_control = control;
-  msg.msg_controllen = sizeof(control);
+// msg_controlに入れるバッファ
+struct FdCmsgBuf {
+  alignas(struct cmsghdr)
+  char buf[CMSG_SPACE(sizeof(int))];
+};
 
-  if (recvmsg(recv_sock, &msg, 0) < 0) {
-    perror("recvmsg");
-    close(recv_sock);
+using Payload = Host::WASI::Environ::Payload;
+
+WasiExpect<INode> INode::receiveFd(uint64_t id, int unix_sock) noexcept {
+  // idをもとにブローカーに要求するペイロード
+  Payload s_data = {.cmd = 'R', .id = id};
+  // msgに設定するiovecにペイロードを詰める
+  struct iovec s_io{};
+  s_io.iov_base = &s_data;
+  s_io.iov_len = sizeof(s_data);
+  //　msgにiovecを設定
+  struct msghdr s_msg{};
+  s_msg.msg_iov = &s_io;
+  s_msg.msg_iovlen = 1;
+  // 要求メッセージを送信
+  if (sendmsg(unix_sock, &s_msg, 0) < 0) {
+    spdlog::error("sendmsg: Request id={} failed", id);
+    ::close(unix_sock);
+    exit(1);
   }
-  struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+  // FD込みのメッセージを受け取る空の箱を作る
+  Payload r_data;
+  struct iovec r_io{};
+  r_io.iov_base = &r_data;
+  r_io.iov_len = sizeof(r_data);
+  struct msghdr r_msg{};
+  r_msg.msg_iov = &r_io;
+  r_msg.msg_iovlen = 1;
+  FdCmsgBuf r_cbuf;
+  r_msg.msg_control = r_cbuf.buf;
+  r_msg.msg_controllen = sizeof(r_cbuf.buf);
+  // メッセージを受け取る
+  ssize_t n = recvmsg(unix_sock, &r_msg, 0);
+  if (n != sizeof(Payload)) {
+    spdlog::error("recvmsg: Request id={} failed", id);
+    ::close(unix_sock);
+    exit(1);
+  }
+  // メッセージにFDが含まれているか確認
+  struct cmsghdr* cmsg = CMSG_FIRSTHDR(&r_msg);
   if (!cmsg || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_type != SCM_RIGHTS) {
-    fprintf(stderr, "Invalid control message\n");
-    close(recv_sock);
+    spdlog::error("Invalid control message");
+    ::close(unix_sock);
+    exit(1);
   }
-
+  if (r_msg.msg_flags & MSG_CTRUNC) {
+    spdlog::error("control message truncated");
+    ::close(unix_sock);
+    exit(1);
+  }
+  // メッセージに含まれるFDを取り出す
   int received_fd;
-  std::memcpy(&received_fd, CMSG_DATA(cmsg), sizeof(received_fd));
-
-  close(recv_sock);
-
+  memcpy(&received_fd, CMSG_DATA(cmsg), sizeof(received_fd));
+  // 受け取ったFDをもとにINodeを作成して返す
   INode New(received_fd);
-  //std::cout << "INode::restoreAccept() return" << std::endl;
-  return New;
-}
-
-WasiExpect<INode> INode::restoreOpen() noexcept {
-  int recv_sock = ::socket(AF_UNIX, SOCK_STREAM, 0);
-  sockaddr_un addr{};
-  addr.sun_family = AF_UNIX;
-  std::strncpy(addr.sun_path, "/tmp/runtime.sock", sizeof(addr.sun_path) - 1);
-  if (connect(recv_sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
-    perror("connect");
-    close(recv_sock);
-  }
-  const char* req = "GETFD";
-  if (write(recv_sock, req, strlen(req)) < 0) {
-    perror("write");
-    close(recv_sock);
-  }
-  
-  struct msghdr msg{};
-  char buf[1];
-  struct iovec io{ buf, sizeof(buf) };
-  msg.msg_iov = &io;
-  msg.msg_iovlen = 1;
-  
-  char control[CMSG_SPACE(sizeof(int))];
-  msg.msg_control = control;
-  msg.msg_controllen = sizeof(control);
-
-  if (recvmsg(recv_sock, &msg, 0) < 0) {
-    perror("recvmsg");
-    close(recv_sock);
-  }
-  struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
-  if (!cmsg || cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_type != SCM_RIGHTS) {
-    fprintf(stderr, "Invalid control message\n");
-    close(recv_sock);
-  }
-
-  int received_fd;
-  std::memcpy(&received_fd, CMSG_DATA(cmsg), sizeof(received_fd));
-
-  close(recv_sock);
-
-  INode New(received_fd);
-  //std::cout << "INode::restoreOpen() return" << std::endl;
   return New;
 }
 

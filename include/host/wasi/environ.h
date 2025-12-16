@@ -12,9 +12,6 @@
 #include "host/wasi/vinode.h"
 #include "wasi/api.hpp"
 
-//@
-#include "runtime/sockregistry.h"
-
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -27,6 +24,9 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #include <iostream>
 
@@ -969,17 +969,120 @@ public:
     }
     NewNode->setOp(2);
     return reservedFdToNode(NewNode);
-    //auto Vfd = generateRandomFdToNode(NewNode);
-    /* auto Vfd = reservedFdToNode(NewNode);
-    if (!Vfd.has_value()){
-      return Vfd;
-    }
-    WasmEdge::Runtime::SocketRegistry::getInstance().addSocket(Vfd.value(), NewNode->getFd(), 2);
-    //spdlog::info("Env.sockAccept cached vfd={} fd={} src={}\n", Vfd.value(), NewNode->getFd(), 2);
-    return Vfd; */
   }
 
-WasiExpect<__wasi_fd_t> restoreAccept(std::string filename) {
+  // 制御コマンドと一意IDを持つペイロード
+  struct Payload {
+  // cmd 送信：'S', 要求：'R', 終了：'E'
+    char cmd;
+    uint64_t id;
+  };
+
+  struct FdEntry {
+    int wasi_fd;
+    uint64_t id;
+    int op;
+  };
+
+  WasiExpect<void> restoreFdMap(std::string imagedir) {
+    // FDをもらうUNIXドメインソケットに接続
+    int unix_sock = ::socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    if (unix_sock < 0) {
+      std::perror("socket");
+      exit(1);
+    }
+    sockaddr_un unaddr;
+    memset(&unaddr, 0, sizeof(unaddr));
+    unaddr.sun_family = AF_UNIX;
+    std::strncpy(unaddr.sun_path, "/tmp/fdpass.sock", sizeof(unaddr.sun_path) - 1);
+    if (connect(unix_sock, reinterpret_cast<sockaddr*>(&unaddr), sizeof(unaddr)) < 0) {
+      std::perror("connect");
+      exit(1);
+    }
+    // イメージファイルを確認・整形して開く
+    if (!imagedir.empty() && imagedir.back() != '/') {
+      imagedir += '/';
+    }
+    imagedir += "socket_fd.img";
+    FILE *fp = std::fopen(imagedir.c_str(), "rb");
+    if (!fp) {
+      spdlog::error("restoreAccept: fopen failed: {}", imagedir);
+      return WasiUnexpect(__WASI_ERRNO_IO);
+    }
+    FdEntry entry;
+    // 仮想FD、id、FDの作成操作の組を一周としてループ
+    while (true) {
+      size_t r1 = std::fread(&entry.wasi_fd, sizeof(entry.wasi_fd), 1, fp);
+      size_t r2 = std::fread(&entry.id, sizeof(entry.id), 1, fp);
+      size_t r3 = std::fread(&entry.op, sizeof(entry.op), 1, fp);
+      if (r1 != 1 || r2 != 1 || r3 != 1) {
+        if (feof(fp)) {
+          spdlog::info("restoreFdMap: reached EOF");
+        } else {
+          spdlog::error("restoreFdMap: fread error");
+        }
+        break;
+      }
+      // VINodeを初期定義
+      std::shared_ptr<VINode> Node;
+      // FD作成操作によって分岐
+      switch(entry.op){
+        // 1: sock_openのとき
+        case 1: {
+          //restore系関数の中でブローカーにFDを要求しVINodeに整形
+          if (auto Res = VINode::restoreOpen(entry.id, unix_sock); unlikely(!Res)) {
+            return WasiUnexpect(Res);
+          } else {
+            // 返り値をNodeに反映
+            Node = std::move(*Res);
+            Node->setOp(1);
+          }
+          break;
+        }
+        // 1: sock_acceptのとき
+        case 2: {
+          if (auto Res = VINode::restoreAccept(entry.id, unix_sock); unlikely(!Res)) {
+            return WasiUnexpect(Res);
+          } else {
+            Node = std::move(*Res);
+            Node->setOp(2);
+          }
+          break;
+        }
+        // それ以外はリストアしない
+        // 今後ファイル系も対応
+        default: {
+          spdlog::error("fread: Invalid Operation {}", entry.op);
+          continue;
+        }
+      }
+      // 仮想FDとNodeの組をFdMapに登録
+      auto Vfd = insertFdToNode(entry.wasi_fd, Node);
+      if (!Vfd.has_value()){
+        spdlog::error("restoreAccept: insertFdToNode failed for Vfd={}", Vfd.value());
+      }
+    }
+    // 受信終了制御
+    Payload e_data = {.cmd = 'E', .id = 0};
+    struct iovec e_io{};
+    e_io.iov_base = &e_data;
+    e_io.iov_len = sizeof(e_data);
+
+    struct msghdr e_msg{};
+    e_msg.msg_iov = &e_io;
+    e_msg.msg_iovlen = 1;
+    if (sendmsg(unix_sock, &e_msg, 0) < 0) {
+      std::fprintf(stderr, "endcmd sendmsg() failed: %s\n", strerror(errno));
+      ::close(unix_sock);
+      exit(1);
+    }
+
+    std::fclose(fp);
+    ::close(unix_sock);
+    return WasiExpect<void>{};
+  }
+
+  /* WasiExpect<__wasi_fd_t> restoreAccept(std::string filename) {
     struct FdEntry {
       int wasi_fd;
       int real_fd;
@@ -1043,10 +1146,10 @@ WasiExpect<__wasi_fd_t> restoreAccept(std::string filename) {
       return WasiUnexpect(__WASI_ERRNO_BADF);
     }
 
-    WasmEdge::Runtime::SocketRegistry::getInstance().addSocket(Vfd.value(), real_fd, 2);
+    //WasmEdge::Runtime::SocketRegistry::getInstance().addSocket(Vfd.value(), real_fd, 2);
     //spdlog::info("Env.restoreAccept cached vfd={} fd={} src={}", Vfd.value(), real_fd, 2);
     return Vfd;
-}
+  }
 
   WasiExpect<__wasi_fd_t> restoreOpen(std::string filename) {
     struct FdEntry {
@@ -1113,10 +1216,10 @@ WasiExpect<__wasi_fd_t> restoreAccept(std::string filename) {
       return WasiUnexpect(__WASI_ERRNO_BADF);
     }
 
-    WasmEdge::Runtime::SocketRegistry::getInstance().addSocket(Vfd.value(), real_fd, 1);
+    //WasmEdge::Runtime::SocketRegistry::getInstance().addSocket(Vfd.value(), real_fd, 1);
     //spdlog::info("Env.restoreOpen cached vfd={} fd={} src={}", Vfd.value(), real_fd, 1);
     return Vfd;
-}
+} */
 
 
   WasiExpect<void> sockConnect(__wasi_fd_t Fd,
