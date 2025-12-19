@@ -2268,50 +2268,78 @@ Expect<void> Executor::execute(Runtime::StackManager &StackMgr,
 
       struct timespec tp_start, tp_end;
       clock_gettime(CLOCK_MONOTONIC, &tp_start);
-
-      Migr.dumpMemoryV2(StackMgr.getModule());
-      Migr.dumpGlobal(StackMgr.getModule());
-      Migr.dumpProgramCounter(Iter);
-      Migr.dumpStackV2(StackMgr, Iter);
       
+      auto getTimeInNs = [](struct timespec before, struct timespec after) -> long long {
+        return (after.tv_sec - before.tv_sec) * 1'000'000'000LL + (after.tv_nsec - before.tv_nsec);
+      };
+
+      struct timespec t1, t2;
+
+      // memory
+      clock_gettime(CLOCK_MONOTONIC, &t1);
+      Migr.dumpMemoryV2(StackMgr.getModule());
+      clock_gettime(CLOCK_MONOTONIC, &t2);
+      fprintf(stderr, "memory, %llu\n", getTimeInNs(t1, t2));
+
+      // global
+      clock_gettime(CLOCK_MONOTONIC, &t1);
+      Migr.dumpGlobal(StackMgr.getModule());
+      clock_gettime(CLOCK_MONOTONIC, &t2);
+      fprintf(stderr, "global, %llu\n", getTimeInNs(t1, t2));
+
+      // program counter
+      clock_gettime(CLOCK_MONOTONIC, &t1); 
+      Migr.dumpProgramCounter(Iter);
+      clock_gettime(CLOCK_MONOTONIC, &t2);
+      fprintf(stderr, "program counter, %llu\n", getTimeInNs(t1, t2));
+
+      // stack
+      clock_gettime(CLOCK_MONOTONIC, &t1);
+      Migr.dumpStackV2(StackMgr, Iter);
+      clock_gettime(CLOCK_MONOTONIC, &t2);
+      fprintf(stderr, "stack, %llu\n", getTimeInNs(t1, t2));
+      
+      // total 
       clock_gettime(CLOCK_MONOTONIC, &tp_end);
       double elapsed = (tp_end.tv_sec - tp_start.tv_sec) + (tp_end.tv_nsec - tp_start.tv_nsec);
       spdlog::info("[WasmEdge] Checkpoint took {:.3f} milliseconds", elapsed / 1e6);
+      
+      exit(0);
 
       // Clean flag
-      setCheckpointFlag(0);
+      // setCheckpointFlag(0);
 
       // Self Stop and Restore for an experiment which is checkpoint and restore WasmEdge's sockets
-      if (std::getenv("IS_SELF_STOP_AND_RESTORE") && std::string(std::getenv("IS_SELF_STOP_AND_RESTORE")) == "1") {
+      // if (std::getenv("IS_SELF_STOP_AND_RESTORE") && std::string(std::getenv("IS_SELF_STOP_AND_RESTORE")) == "1") {
 
-        // 自分自身に SIGTSTP を送信
-        pid_t pid = getpid();
-        if (kill(pid, SIGTSTP) != 0) {
-            perror("kill");
-            return {};
-        }
-        setCheckpointFlag(0);
+      //   // 自分自身に SIGTSTP を送信
+      //   pid_t pid = getpid();
+      //   if (kill(pid, SIGTSTP) != 0) {
+      //       perror("kill");
+      //       return {};
+      //   }
+      //   setCheckpointFlag(0);
 
-        // Restore
-        // Migr.Prepare(StackMgr.getModule(), Conf.getStatisticsConfigure().getImageDir());
-        struct timespec tp2_start, tp2_end;
-        clock_gettime(CLOCK_MONOTONIC, &tp2_start);
-        Migr.restoreMemoryV2(StackMgr.getModule());
-        Migr.restoreGlobal(StackMgr.getModule());
-        auto Res = Migr.restoreProgramCounter(StackMgr.getModule());
-        if (!Res) {
-          return Unexpect(Res);
-        }
-        PC = Res.value();
-        // StartIt += 1; // 保存は、前の命令と対応づけているので、復元時に+1
-        Migr.restoreStackV2(StackMgr);
+      //   // Restore
+      //   // Migr.Prepare(StackMgr.getModule(), Conf.getStatisticsConfigure().getImageDir());
+      //   struct timespec tp2_start, tp2_end;
+      //   clock_gettime(CLOCK_MONOTONIC, &tp2_start);
+      //   Migr.restoreMemoryV2(StackMgr.getModule());
+      //   Migr.restoreGlobal(StackMgr.getModule());
+      //   auto Res = Migr.restoreProgramCounter(StackMgr.getModule());
+      //   if (!Res) {
+      //     return Unexpect(Res);
+      //   }
+      //   PC = Res.value();
+      //   // StartIt += 1; // 保存は、前の命令と対応づけているので、復元時に+1
+      //   Migr.restoreStackV2(StackMgr);
 
-        clock_gettime(CLOCK_MONOTONIC, &tp2_end);
-        elapsed = (tp2_end.tv_sec - tp2_start.tv_sec) + (tp2_end.tv_nsec - tp2_start.tv_nsec);
-        spdlog::info("[WasmEdge] Restore took {:.3f} milliseconds", elapsed / 1e6);
-      } else {
-        exit(0);
-      }
+      //   clock_gettime(CLOCK_MONOTONIC, &tp2_end);
+      //   elapsed = (tp2_end.tv_sec - tp2_start.tv_sec) + (tp2_end.tv_nsec - tp2_start.tv_nsec);
+      //   spdlog::info("[WasmEdge] Restore took {:.3f} milliseconds", elapsed / 1e6);
+      // } else {
+      //   exit(0);
+      // }
     }
 #endif
 

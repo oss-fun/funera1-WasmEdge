@@ -16,7 +16,7 @@
 #include <wasmig/log.h>
 
 #define WASMIG_ENABLE_METADATA_STACKMAP 1
-#define WASMIG_ENABLE_METADATA_ADDRMAP 0
+#define WASMIG_ENABLE_METADATA_ADDRMAP 1
 
 namespace WasmEdge {
 namespace Validator {
