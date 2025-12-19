@@ -5,7 +5,6 @@
 #include "runtime/instance/function.h"
 #include "runtime/stackmgr.h"
 #include "runtime/storemgr.h"
-#include "runtime/sockregistry.h"
 #include "executor/executor.h"
 
 #include "host/wasi/wasimodule.h"
@@ -383,7 +382,9 @@ public:
   // 制御コマンドと一意IDを持つペイロード
   struct Payload {
     // cmd 送信：'S', 要求：'R', 終了：'E'
-    char cmd;
+    uint8_t cmd;
+    // IPCのため8byteアライメントを保証する7byteパディング
+    uint8_t pad[7];
     uint64_t id;
   };
   // msg_controlに入れるバッファ
@@ -448,8 +449,6 @@ public:
     }
     // WASIモジュールからFDMAPを取る（仮想FD：VINode）
     auto map = wasimod->getEnv().getFdMap(); 
-    std::cout << "FdMap size = " << map.size() << std::endl;
-
     // FD渡し用ソケット、SEQPACKETで境界保証
     int unix_sock = ::socket(AF_UNIX, SOCK_SEQPACKET, 0);
     if (unix_sock < 0) {
@@ -467,31 +466,37 @@ public:
     }
     // イメージファイルを開く
     std::ofstream ofs(ImageDir + "socket_fd.img", std::ios::trunc | std::ios::binary);
-    
     // FDMAPの要素でループ
-    for (const auto& pair : map) {  
+    for (const auto& pair : map) { 
+      // 仮想FDを正値チェックしてからサイズ固定のためuint32_tにキャスト 
+      if (pair.first < 0){
+        continue;
+      }
+      uint32_t wasi_fd = static_cast<uint32_t>(pair.first);
       // ソケット生成オペレーションに対するリストア関数未対応なら抜ける
-      int op = pair.second->getOp();
+      uint32_t op = pair.second->getOp();
       if (op == 0){
         continue;
       }
       // VINodeから実FDを取る
-      //int fd = pair.second->getFd();
       int fd = pair.second->getNativeHandler().value();
       // 一意なidを作成
       uint64_t id = generateId();
-
+      
       // === チェックポイントファイル作成部分 === //
-      ofs.write(reinterpret_cast<const char*>(&pair.first), sizeof(pair.first));
+      ofs.write(reinterpret_cast<const char*>(&wasi_fd), sizeof(wasi_fd));
       ofs.write(reinterpret_cast<const char*>(&id), sizeof(id));
       ofs.write(reinterpret_cast<const char*>(&op), sizeof(op));
 
       // === FD送信部分 === //
 
       // 送信用ペイロード作成
-      Payload data = {.cmd = 'S', .id = id};
-      std::cout << "id: " << data.id << " Vfd:" << pair.first << " => op:" << op << " Rfd:" << fd << "\n";
-      
+      Payload data;
+      // パディングの無効値を防ぐため0埋め
+      memset(&data, 0 , sizeof(data));
+      data.cmd = 'S';
+      data.id = id;
+      //std::cout << "id: " << data.id << " Vfd:" << pair.first << " => op:" << op << " Rfd:" << fd << "\n";
       struct iovec io{};
       struct msghdr msg{};
       FdCmsgBuf cbuf;
@@ -509,7 +514,10 @@ public:
       }
     }
     // 送信終了制御
-    Payload e_data = {.cmd = 'E', .id = 0};
+    Payload e_data;
+    memset(&e_data, 0, sizeof(e_data));
+    e_data.cmd = 'E';
+    e_data.id = 0;
     struct iovec e_io{};
     struct msghdr e_msg{};
     setUpMsg(&e_msg, &e_io, e_data);

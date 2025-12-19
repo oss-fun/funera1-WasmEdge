@@ -973,15 +973,17 @@ public:
 
   // 制御コマンドと一意IDを持つペイロード
   struct Payload {
-  // cmd 送信：'S', 要求：'R', 終了：'E'
-    char cmd;
+    // cmd 送信：'S', 要求：'R', 終了：'E'
+    uint8_t cmd;
+    // IPCのため8byteアライメントを保証する7byteパディング
+    uint8_t pad[7];
     uint64_t id;
   };
-
+  // イメージファイルから読み出す1エントリ
   struct FdEntry {
-    int wasi_fd;
+    uint32_t wasi_fd;
     uint64_t id;
-    int op;
+    uint32_t op;
   };
 
   WasiExpect<void> restoreFdMap(std::string imagedir) {
@@ -1012,9 +1014,11 @@ public:
     FdEntry entry;
     // 仮想FD、id、FDの作成操作の組を一周としてループ
     while (true) {
+      // チェックポイントファイルから1エントリ読み出す
       size_t r1 = std::fread(&entry.wasi_fd, sizeof(entry.wasi_fd), 1, fp);
       size_t r2 = std::fread(&entry.id, sizeof(entry.id), 1, fp);
       size_t r3 = std::fread(&entry.op, sizeof(entry.op), 1, fp);
+      // 終端まで読んだorエラーで抜ける
       if (r1 != 1 || r2 != 1 || r3 != 1) {
         if (feof(fp)) {
           spdlog::info("restoreFdMap: reached EOF");
@@ -1029,7 +1033,7 @@ public:
       switch(entry.op){
         // 1: sock_openのとき
         case 1: {
-          //restore系関数の中でブローカーにFDを要求しVINodeに整形
+          //関数の中でブローカーにFDを要求しVINodeを整形
           if (auto Res = VINode::restoreOpen(entry.id, unix_sock); unlikely(!Res)) {
             return WasiUnexpect(Res);
           } else {
@@ -1063,11 +1067,14 @@ public:
       }
     }
     // 受信終了制御
-    Payload e_data = {.cmd = 'E', .id = 0};
+    Payload e_data;
+    // パディングの無効値を防ぐため0埋め
+    memset(&e_data, 0, sizeof(e_data));
+    e_data.cmd = 'E';
+    e_data.id = 0;
     struct iovec e_io{};
     e_io.iov_base = &e_data;
     e_io.iov_len = sizeof(e_data);
-
     struct msghdr e_msg{};
     e_msg.msg_iov = &e_io;
     e_msg.msg_iovlen = 1;

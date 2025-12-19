@@ -1001,10 +1001,23 @@ struct FdCmsgBuf {
 };
 
 using Payload = Host::WASI::Environ::Payload;
+// 制御コマンドと一意IDを持つペイロード
+// cmd: 送信'S', 要求'R', 終了'E'
+// pad: IPCのため8byteアライメントを保証する7byteパディング
+//
+// struct Payload {   
+//    uint8_t cmd;
+//    uint8_t pad[7];
+//    uint64_t id;
+// };
 
 WasiExpect<INode> INode::receiveFd(uint64_t id, int unix_sock) noexcept {
   // idをもとにブローカーに要求するペイロード
-  Payload s_data = {.cmd = 'R', .id = id};
+  Payload s_data;
+  // パディングの無効値を防ぐため0埋め
+  memset(&s_data, 0, sizeof(s_data));
+  s_data.cmd = 'R';
+  s_data.id = id;
   // msgに設定するiovecにペイロードを詰める
   struct iovec s_io{};
   s_io.iov_base = &s_data;
@@ -1021,6 +1034,7 @@ WasiExpect<INode> INode::receiveFd(uint64_t id, int unix_sock) noexcept {
   }
   // FD込みのメッセージを受け取る空の箱を作る
   Payload r_data;
+  memset(&r_data, 0, sizeof(r_data));
   struct iovec r_io{};
   r_io.iov_base = &r_data;
   r_io.iov_len = sizeof(r_data);

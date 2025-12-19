@@ -705,15 +705,15 @@ public:
   // fd_readdir  = 
   // path_open   =
 
-  void setOp(int value) { op = value; }
-  int getOp() { return op; }
+  void setOp(u_int32_t value) { op = value; }
+  uint32_t getOp() { return op; }
 
 private:
   INode Node;
   __wasi_rights_t FsRightsBase;
   __wasi_rights_t FsRightsInheriting;
   std::string Name;
-  int op = 0;
+  uint32_t op = 0;
 
   friend class VPoller;
 
