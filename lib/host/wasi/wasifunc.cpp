@@ -1626,6 +1626,71 @@ Expect<uint32_t> WasiSockOpenV1::body(const Runtime::CallingFrame &Frame,
   return __WASI_ERRNO_SUCCESS;
 }
 
+//@ compatible WAMR
+
+Expect<uint32_t> WasiSockOpenCompatShim::body(const Runtime::CallingFrame &Frame,
+                        uint32_t PoolFd, 
+                        uint32_t AddressFamily, uint32_t SockType,
+                        uint32_t /* Out */ RoFdPtr) {
+  
+  spdlog::info("call WasiSockOpenCompatShim");                        
+  auto *MemInst = Frame.getMemoryByIndex(0);
+  if (MemInst == nullptr) {
+    spdlog::info("MemInst == nullptr");
+    return __WASI_ERRNO_FAULT;
+  }
+
+  (void)PoolFd;
+
+  __wasi_fd_t *const RoFd = MemInst->getPointer<__wasi_fd_t *>(RoFdPtr);
+  if (RoFd == nullptr) {
+    spdlog::info("RoFd == nullptr");
+    return __WASI_ERRNO_FAULT;
+  }                         
+
+  __wasi_address_family_t WasiAddressFamily;
+  switch (AddressFamily) {
+    case 0:
+      WasiAddressFamily = __WASI_ADDRESS_FAMILY_INET4;
+      break;
+    case 1:
+      WasiAddressFamily = __WASI_ADDRESS_FAMILY_INET6;
+      break;
+    default:
+      return __WASI_ERRNO_INVAL;
+  }
+
+  __wasi_sock_type_t WasiSockType;
+  switch (SockType) {
+    case 0:
+      WasiSockType = __WASI_SOCK_TYPE_SOCK_DGRAM;
+      break;
+    case 1:
+      WasiSockType = __WASI_SOCK_TYPE_SOCK_STREAM;
+      break;
+    default:
+      return __WASI_ERRNO_INVAL;
+  }
+
+  spdlog::info(
+  "sockOpen args: AddressFamily = {} (raw = {}), SockType = {} (raw = {})",
+  static_cast<uint32_t>(WasiAddressFamily),
+  static_cast<uint32_t>(AddressFamily),
+  static_cast<uint32_t>(WasiSockType),
+  static_cast<uint32_t>(SockType)
+  );
+
+  if (auto Res = Env.sockOpen(WasiAddressFamily, WasiSockType);
+      unlikely(!Res)) {
+    return Res.error();
+  } else {
+    *RoFd = *Res;
+  }
+
+  return __WASI_ERRNO_SUCCESS;
+  //return WasiSockOpenV1(Env).body(Frame, AddressFamily, SockType, RoFdPtr);
+}
+
 Expect<uint32_t> WasiSockBindV1::body(const Runtime::CallingFrame &Frame,
                                       int32_t Fd, uint32_t AddressPtr,
                                       uint32_t Port) {
@@ -1663,22 +1728,84 @@ Expect<uint32_t> WasiSockBindV1::body(const Runtime::CallingFrame &Frame,
 
   const __wasi_fd_t WasiFd = Fd;
 
-std::ostringstream oss;
-for (size_t i = 0; i < Address.size(); i++) {
-  if (i > 0) oss << ".";
-  oss << static_cast<int>(Address[i]); // u8 → int にキャストして出力
-}
+  std::ostringstream oss;
+  for (size_t i = 0; i < Address.size(); i++) {
+    if (i > 0) oss << ".";
+    oss << static_cast<int>(Address[i]); // u8 → int にキャストして出力
+  }
 
-std::string addr_str = oss.str();
+  std::string addr_str = oss.str();
   //spdlog::info("call Env.SockBind(WasiFd = {}, WasiAddressFamily = {}, Address = {}, Port = {})", WasiFd, static_cast<int>(WasiAddressFamily), addr_str, Port);
 
   if (auto Res = Env.sockBind(WasiFd, WasiAddressFamily, Address,
-                              static_cast<uint16_t>(Port));
-      unlikely(!Res)) {
+                              static_cast<uint16_t>(Port)); unlikely(!Res)) {
     return Res.error();
   }
   //spdlog::info("sock_bind success");
   return __WASI_ERRNO_SUCCESS;
+}
+
+//@ compatible WAMR
+
+Expect<uint32_t> WasiSockBindCompatShim::body(const Runtime::CallingFrame &Frame, int32_t Fd,
+                        uint32_t AddressPtr) {
+  //spdlog::info("call WasiSockBindCompatShim");
+
+  auto *MemInst = Frame.getMemoryByIndex(0);
+  if (MemInst == nullptr) {
+    return __WASI_ERRNO_FAULT;
+  }
+  // Rust 側から渡された __wasi_addr_t 構造体を取得
+  __compat_wasi_addr_t *WamrAddress =
+      MemInst->getPointer<__compat_wasi_addr_t *>(AddressPtr);
+  if (!WamrAddress) {
+    //spdlog::error("failed to get pointer for wasi_addr_t");
+    return __WASI_ERRNO_FAULT;
+  }
+
+  __wasi_size_t addr_len;
+  __wasi_address_family_t WasiAddressFamily;
+  switch (WamrAddress->kind) {
+  case 0: // IPv4
+    addr_len = 4;
+    WasiAddressFamily = __WASI_ADDRESS_FAMILY_INET4;
+    break;
+  case 1: // IPv6
+    addr_len = 16;
+    WasiAddressFamily = __WASI_ADDRESS_FAMILY_INET6;
+    break;
+  default:
+    //spdlog::error("unsupported address kind {}", InnerAddress->kind);
+    return __WASI_ERRNO_INVAL;
+  }
+
+  //ポートを取り出す
+  uint16_t Port = WamrAddress->u.port;
+
+  std::array<uint8_t, 16> addr_buf{};
+  std::memcpy(addr_buf.data(), &WamrAddress->u.addr, addr_len);
+
+  const __wasi_fd_t WasiFd = Fd;
+
+  if (auto Res = Env.sockBind(WasiFd, WasiAddressFamily, Span<const uint8_t>(addr_buf.data(), addr_len),
+                                static_cast<uint16_t>(Port)); unlikely(!Res)) {
+    return Res.error();
+  }
+  return __WASI_ERRNO_SUCCESS;
+
+  //uint32_t addr_ptr_for_v1 = AddressPtr + sizeof(WamrAddress->kind); //kind部分を無視するオフセット
+
+  //uint8_t *dst = MemInst->getPointer<uint8_t *>(addr_ptr_for_v1); //dst = addr先頭
+  //if (!dst) {
+  //  return __WASI_ERRNO_FAULT;
+  //}
+
+  //uint32_t *len_ptr = reinterpret_cast<uint32_t*>(dst + addr_len); //addr先頭 + addr_len = portフィールド部分
+  //*len_ptr = addr_len; //buf_lenに対応するようアドレス長に書き換え
+
+  //spdlog::info("AddrPtr(V1) = {} (was {} + 4), Port = {}, Address.size() = {}", addr_ptr_for_v1, AddressPtr, port, addr_len);
+
+  //return WasiSockBindV1(Env).body(Frame, Fd, addr_ptr_for_v1, port);
 }
 
 Expect<uint32_t> WasiSockListenV1::body(const Runtime::CallingFrame &,
@@ -3068,70 +3195,6 @@ Expect<uint32_t> WasiSockGetPeerAddrV2::body(const Runtime::CallingFrame &Frame,
   Storage.setAddressFamily(WasiAddressFamily);
   *RoPort = Port;
   return __WASI_ERRNO_SUCCESS;
-}
-
-//@ compatible WAMR
-
-Expect<uint32_t> WasiSockOpenCompatShim::body(const Runtime::CallingFrame &Frame,
-                        uint32_t PoolFd, 
-                        uint32_t AddressFamily, uint32_t SockType,
-                        uint32_t /* Out */ RoFdPtr) {
-  //spdlog::info("call WasiSockOpenCompatShim");
-  (void)PoolFd;
-  if (AddressFamily == 0) {
-    AddressFamily = 1;
-  }
-  if (SockType == 1){
-    SockType = 2;
-  }
-  return WasiSockOpenV1(Env).body(Frame, AddressFamily, SockType, RoFdPtr);
-}
-
-Expect<uint32_t> WasiSockBindCompatShim::body(const Runtime::CallingFrame &Frame, int32_t Fd,
-                        uint32_t AddressPtr) {
-  //spdlog::info("call WasiSockBindCompatShim");
-
-  auto *MemInst = Frame.getMemoryByIndex(0);
-  if (!MemInst) {
-    return __WASI_ERRNO_FAULT;
-  }
-  // Rust 側から渡された __wasi_addr_t 構造体を取得
-  __compat_wasi_addr_t *InnerAddress =
-      MemInst->getPointer<__compat_wasi_addr_t *>(AddressPtr);
-  if (!InnerAddress) {
-    //spdlog::error("failed to get pointer for wasi_addr_t");
-    return __WASI_ERRNO_FAULT;
-  }
-
-  uint32_t addr_len;
-  switch (InnerAddress->kind) {
-  case 0: // IPv4
-    addr_len = 4;
-    break;
-  case 1: // IPv6
-    addr_len = 16;
-    break;
-  default:
-    //spdlog::error("unsupported address kind {}", InnerAddress->kind);
-    return __WASI_ERRNO_INVAL;
-  }
-
-  //ポートを取り出す
-  uint16_t port = InnerAddress->u.port;
-
-  uint32_t addr_ptr_for_v1 = AddressPtr + sizeof(InnerAddress->kind); //kind部分を無視するオフセット
-
-  uint8_t *dst = MemInst->getPointer<uint8_t *>(addr_ptr_for_v1); //dst = addr先頭
-  if (!dst) {
-    return __WASI_ERRNO_FAULT;
-  }
-
-  uint32_t *len_ptr = reinterpret_cast<uint32_t*>(dst + addr_len); //addr先頭 + addr_len = portフィールド部分
-  *len_ptr = addr_len; //buf_lenに対応するようアドレス長に書き換え
-
-  //spdlog::info("AddrPtr(V1) = {} (was {} + 4), Port = {}, Address.size() = {}", addr_ptr_for_v1, AddressPtr, port, addr_len);
-
-  return WasiSockBindV1(Env).body(Frame, Fd, addr_ptr_for_v1, port);
 }
 
 } // namespace Host
